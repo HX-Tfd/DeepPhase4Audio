@@ -2,7 +2,11 @@ import argparse
 import os
 import json
 
+import yaml
+
 from src.utils.constants import *
+from src.utils.helpers import DotDict
+
 
 def expandpath(path):
     return os.path.abspath(os.path.expandvars(os.path.expanduser(path)))
@@ -105,6 +109,23 @@ def command_line_parser():
     cfg = parser.parse_args()
     print(json.dumps(cfg.__dict__, indent=4, sort_keys=True))
     return cfg
+
+
+def yaml_config_parser():
+    parser = argparse.ArgumentParser(description="")
+    parser.add_argument(
+        '--config_file', type=str, default='../configs/mock_config.yaml', help='path to yaml config')
+    args, _ = parser.parse_known_args()
+    cfg = load_config(args.config_file)
+    return cfg
+    
+    
+def load_config(path):
+    with open(path) as stream:
+        try:
+            return DotDict(yaml.safe_load(stream))
+        except yaml.YAMLError as exc:
+            print("error loading config: ", exc)
 
 
 EXPERIMENT_INVARIANT_KEYS = (

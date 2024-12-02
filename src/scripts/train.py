@@ -12,13 +12,13 @@ from pytorch_lightning.callbacks import RichProgressBar
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
 
 from src.utils.rules import check_all_rules
-from src.utils.config import command_line_parser
+from src.utils.config import command_line_parser, yaml_config_parser
 from src.experiments.experiment import MockExperiment # don't remove this
 from src.utils.helpers import get_device_accelerator 
 
 
 def main():
-    cfg = command_line_parser()
+    cfg = command_line_parser() # yaml_config_parser() note that the namespaces are accessed differently
 
     # Remove previous logs 
     # if os.path.isdir(cfg.log_dir):
@@ -53,20 +53,20 @@ def main():
     )
 
     # if this doesn't work (e.g. rich install fails) use TQDM progressbar instead (below)
-    # rich_progress_bar = RichProgressBar( 
-    #     theme=RichProgressBarTheme(
-    #         description="green_yellow",
-    #         progress_bar="green1",
-    #         progress_bar_finished="green1",
-    #         progress_bar_pulse="#6206E0",
-    #         batch_progress="green_yellow",
-    #         time="grey82",
-    #         processing_speed="grey82",
-    #         metrics="grey82",
-    #         metrics_text_delimiter="\n",
-    #         metrics_format=".3e",
-    #     )
-    # )
+    rich_progress_bar = RichProgressBar( 
+        theme=RichProgressBarTheme(
+            description="green_yellow",
+            progress_bar="green1",
+            progress_bar_finished="green1",
+            progress_bar_pulse="#6206E0",
+            batch_progress="green_yellow",
+            time="grey82",
+            processing_speed="grey82",
+            metrics="grey82",
+            metrics_text_delimiter="\n",
+            metrics_format=".3e",
+        )
+    )
 
     tqdm_progress_bar = TQDMProgressBar(refresh_rate=10)
 
@@ -78,7 +78,7 @@ def main():
     # Log information to wandb
     trainer = Trainer(
         logger=[wandb_logger, csv_logger] if cfg.logging else False,
-        callbacks=[checkpoint_local_callback, tqdm_progress_bar],
+        callbacks=[checkpoint_local_callback, rich_progress_bar],
         accelerator='cuda',#get_device_accelerator(preferred_accelerator='auto'),
         devices=1,
         default_root_dir=cfg.ckpt_save_dir, # directory to save checkpoints at every epoch end

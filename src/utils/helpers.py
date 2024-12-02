@@ -6,6 +6,61 @@ from src.datasets.dataset import MockDataset
 from src.models import PAE
 
 
+class DotDict:
+    """
+        A class to conveniently wrap dictionaries to access them by dot
+    """
+    def __init__(self, dictionary):
+        for key, value in dictionary.items():
+            if isinstance(value, dict):
+                value = DotDict(value)
+            self.__dict__[key] = value
+
+    def __getitem__(self, item):
+        return self.__dict__[item]
+
+    def __repr__(self):
+        return str(self.__dict__)
+    
+    def to_dict(self):
+        result = {}
+        for key, value in self.__dict__.items():
+            if isinstance(value, DotDict):
+                result[key] = value.to_dict()
+            else:
+                result[key] = value
+        return result
+
+
+def replace_value(d: DotDict, ref, value):
+    """
+    Replaces the value in the DotDict instance by directly passing the reference to the sub-object.
+    
+    :param d: The root DotDict instance
+    :param ref: A reference to the specific value to replace (e.g., d.me)
+    :param value: The new value to set
+    :return: The modified DotDict
+    """
+    def find_parent_and_key(current, target):
+        """Recursively find the parent DotDict and key of the target value."""
+        for key, val in current.__dict__.items():
+            if val is target:  
+                return current, key
+            if isinstance(val, DotDict):
+                result = find_parent_and_key(val, target)
+                if result:
+                    return result
+        return None
+
+    result = find_parent_and_key(d, ref)
+    if not result:
+        raise ValueError("Reference not found in the DotDict.")
+    
+    parent, key = result
+    parent[key] = value
+    return d
+
+
 def resolve_dataset_class(name):
     return {
         'mock_dataset': MockDataset,

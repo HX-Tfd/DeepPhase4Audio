@@ -1,0 +1,29 @@
+metadata:
+  name: 'mock_experiment'
+  log_dir: '/logs'
+  logging: True
+
+dataset_config:
+  dataaset: 'mock_dataset'
+  dataset_root: '/data'
+  resume: ''
+
+training_config:
+  optimizer_config: 'Adam'
+  optimizer_lr: 0.01
+  optimizer_momentum: 0.9
+  optimizer_weight_decay: 0.001
+  optimizer_float_16: False
+  lr_scheduler: 'poly'
+  lr_scheduler_power: 0.9
+
+model_config:
+  model_name: 'pae'
+  input_channels: 78
+  embedding_channels: 5
+  time_range: 121
+  window: 2.0
+
+worker_config:
+  workers: 16
+  workers_validation: 16
