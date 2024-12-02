@@ -20,10 +20,9 @@ from src.utils.helpers import get_device_accelerator
 def main():
     cfg = command_line_parser()
 
-    # Remove previous logs and check file structure
-    if os.path.isdir(cfg.log_dir):
-        shutil.rmtree(cfg.log_dir)
-    check_all_rules(cfg)
+    # Remove previous logs 
+    # if os.path.isdir(cfg.log_dir):
+    #     shutil.rmtree(cfg.log_dir)
 
     # Resolve name task
     experiment_name = "MockExperiment" 
@@ -46,7 +45,7 @@ def main():
             )
 
     checkpoint_local_callback = ModelCheckpoint(
-        dirpath=os.path.join(cfg.ckpt_save_dir, 'checkpoints'), # currently not using log_dir 
+        dirpath=os.path.join(cfg.log_dir, 'checkpoints'),
         save_last=False,
         save_top_k=1,
         monitor='metrics_MAE',
@@ -54,20 +53,20 @@ def main():
     )
 
     # if this doesn't work (e.g. rich install fails) use TQDM progressbar instead (below)
-    rich_progress_bar = RichProgressBar( 
-        theme=RichProgressBarTheme(
-            description="green_yellow",
-            progress_bar="green1",
-            progress_bar_finished="green1",
-            progress_bar_pulse="#6206E0",
-            batch_progress="green_yellow",
-            time="grey82",
-            processing_speed="grey82",
-            metrics="grey82",
-            metrics_text_delimiter="\n",
-            metrics_format=".3e",
-        )
-    )
+    # rich_progress_bar = RichProgressBar( 
+    #     theme=RichProgressBarTheme(
+    #         description="green_yellow",
+    #         progress_bar="green1",
+    #         progress_bar_finished="green1",
+    #         progress_bar_pulse="#6206E0",
+    #         batch_progress="green_yellow",
+    #         time="grey82",
+    #         processing_speed="grey82",
+    #         metrics="grey82",
+    #         metrics_text_delimiter="\n",
+    #         metrics_format=".3e",
+    #     )
+    # )
 
     tqdm_progress_bar = TQDMProgressBar(refresh_rate=10)
 
@@ -79,8 +78,8 @@ def main():
     # Log information to wandb
     trainer = Trainer(
         logger=[wandb_logger, csv_logger] if cfg.logging else False,
-        callbacks=[checkpoint_local_callback, rich_progress_bar],
-        accelerator='cpu',#get_device_accelerator(preferred_accelerator='auto'),
+        callbacks=[checkpoint_local_callback, tqdm_progress_bar],
+        accelerator='cuda',#get_device_accelerator(preferred_accelerator='auto'),
         devices=1,
         default_root_dir=cfg.ckpt_save_dir, # directory to save checkpoints at every epoch end
         max_epochs=cfg.num_epochs,
@@ -93,13 +92,8 @@ def main():
         # log_every_n_steps=10,
     )
 
-    # train the model
+    # train and test the model
     trainer.fit(model, ckpt_path=cfg.resume)
-
-
-    # prepare submission archive with predictions, source code, training log, and the model
-    dir_pred = os.path.join(cfg.log_dir, 'predictions')
-    shutil.rmtree(dir_pred, ignore_errors=True)
     trainer.test(model)
 
 

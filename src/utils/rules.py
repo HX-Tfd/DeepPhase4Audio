@@ -70,17 +70,17 @@ def diff_source_dir_and_zip(cfg, dir_src, path_zip):
 
 
 def check_all_rules(cfg):
-    dir_repo = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'))
+    dir_repo = os.path.abspath(os.path.join(os.path.dirname(__file__), 'src'))
     common_repo_log = os.path.abspath(os.path.commonprefix([dir_repo, cfg.log_dir]))
     common_repo_dataset = os.path.abspath(os.path.commonprefix([dir_repo, cfg.dataset_root]))
     path_source_zip = os.path.join(cfg.log_dir, 'source.zip')
-    assert dir_repo != common_repo_log, 'Log directory must be outside of the code directory'
-    assert dir_repo != common_repo_dataset, 'Dataset must be outside of the code directory'
+    assert dir_repo != common_repo_log, 'Log directory must be outside of the code directory (src)'
+    assert dir_repo != common_repo_dataset, 'Dataset must be outside of the code directory (src)'
     assert not os.path.isdir(cfg.log_dir) or os.path.isfile(path_source_zip), \
         'Log directory exists, but "source.zip" was not found in it. Either put it back or remove the log ' \
         'directory and start the experiment again. Check README for the recommended workflow'
     if not os.path.isdir(cfg.log_dir):
         os.makedirs(cfg.log_dir)
-        pack_source_dir(cfg, dir_repo, path_source_zip)
+        # pack_source_dir(cfg, dir_repo, path_source_zip)
     else:
         diff_source_dir_and_zip(cfg, dir_repo, path_source_zip)

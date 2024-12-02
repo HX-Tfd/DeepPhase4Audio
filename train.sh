@@ -1,7 +1,11 @@
+# exit when any command fails
+set -e
+
 # Add environ var
 export DATA='..'
 export TMPDIR='tmp'
-export SAVEDIR='../logs'
+export SAVEDIR='logs'
+export DATADIR='data'
 
 # setup weights and biases
 export WANDB_API_KEY=$(cat "wandb.key")
@@ -19,8 +23,7 @@ echo "Start training"
 python -m src.scripts.train \
   --logging no \
   --log_dir ${SAVEDIR} \
-  --dataset_root '..' \
-  --ckpt_save_dir 'logs' \
+  --dataset_root ${DATADIR} \
   --name mock \
   --model_name pae \
   --optimizer adam \

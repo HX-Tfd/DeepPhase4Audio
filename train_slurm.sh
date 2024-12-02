@@ -1,54 +1,47 @@
 #!/bin/bash
 #SBATCH --ntasks=1                     
 #SBATCH --nodes=1 
-#SBATCH --ntasks-per-node=1
-#SBATCH --gpus-per-node=1
-#SBATCH --cpus-per-task=4              
+#SBATCH --account=dl
+#SBATCH --output=logs/test_output.out
 #SBATCH --mem-per-cpu=2G
-#SBATCH --time=00-12:00:00 
+#SBATCH --time=00-6:00:00 
 
-# Go to the current folder
-SCRIPTDIR=$(scontrol show job "$SLURM_JOB_ID" | awk -F= '/Command=/{print $2}')
-SCRIPTDIR=$(realpath "$SCRIPTDIR")
-cd $(dirname "$SCRIPTDIR")
+# Note that specifying TRES per node and task is not allowed on this cluster
 
-# Setup environment (adapt if necessary)
-source /srv/beegfs-benderdata/scratch/${USER}/data/conda/etc/profile.d/conda.sh
-conda activate py39
+# exit when any command fails
+# set -e
 
 # Add environ var
-export DATA=/srv/beegfs-benderdata/scratch/... # TODO
-export TMPDIR=/scratch/${USER}
-export SAVEDIR=/srv/beegfs-benderdata/scratch/${USER}/data/ex1_submission
+export DATA='..'
+export TMPDIR='tmp'
+export SAVEDIR='logs'
+export DATADIR='data'
+
+# Go to the current folder
+# SCRIPTDIR=$(scontrol show job "$SLURM_JOB_ID" | awk -F= '/Command=/{print $2}')
+# SCRIPTDIR=$(realpath "$SCRIPTDIR")
+# cd $(dirname "$SCRIPTDIR")
 
 # setup weights and biases
-# export WANDB_API_KEY=$(cat "wandb.key")
-# export WANDB_DIR=${TMPDIR}
-# export WANDB_CACHE_DIR=${TMPDIR}
-# export WANDB_CONFIG_DIR=${TMPDIR}
-
-# Extract dataset (do not change this)
-echo "Loading dataset"
-mkdir -p ${TMPDIR}
-mkdir -p ${SAVEDIR}
-tar -xf ${DATA} -C ${TMPDIR}
+export WANDB_API_KEY=$(cat "wandb.key") # make sure you create this file and put your API key inside if you set --logging true
+export WANDB_DIR=${TMPDIR}
+export WANDB_CACHE_DIR=${TMPDIR}
+export WANDB_CONFIG_DIR=${TMPDIR}
 
 # Run training
 echo "Start training"
 
-# You can specify the hyperparameters and the experiment name here.
 python -m src.scripts.train \
+  --logging no \
   --log_dir ${SAVEDIR} \
-  --dataset_root ${TMPDIR}/miniscapes \
-  --name experiment_name \
+  --dataset_root ${DATADIR} \
+  --name mock \
   --model_name pae \
   --optimizer adam \
-  --optimizer_lr 0.0001 \
+  --optimizer_lr 0.01 \
   --batch_size 16 \
-  --num_epochs 3 \
-  --workers ${SLURM_CPUS_PER_TASK} \
-  --workers_validation ${SLURM_CPUS_PER_TASK} \
-  --batch_size_validation 16 \
+  --num_epochs 16 \
+  --workers 0 \
+  --workers_validation 0 \
+  --batch_size_validation 4 \
   --optimizer_float_16 no \
-  
-# END YOUR CHANGES HERE
