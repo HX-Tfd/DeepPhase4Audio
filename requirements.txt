@@ -4,5 +4,5 @@ Plotting==0.0.7
 pytorch_lightning==2.4.0
 scikit_learn==1.4.2
 torch==2.5.1
-soundfile=?
+soundfile==0.12.1
 rich >= 10.2.2
