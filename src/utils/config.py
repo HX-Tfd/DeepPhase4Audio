@@ -73,7 +73,7 @@ def command_line_parser():
     Dataset config
     """
     parser.add_argument(
-        '--dataset', type=str, default='mock_dataset', choices=['mock_dataset'], help='Dataset name') # TODO: change the dataset 
+        '--dataset', type=str, default='audio_dataset', choices=['mock_dataset', 'audio_dataset'], help='Dataset name') 
 
 
     """
@@ -82,7 +82,7 @@ def command_line_parser():
     """
     parser.add_argument(
         '--model_name', type=str, default='pae',
-        choices=['pae'],
+        choices=['pae', 'pae_flat'],
         help='name of the model')
     parser.add_argument(
         '--input_channels', type=int, default=input_channels, help="number of channels along time in the input data (here 3*J as XYZ-component of each joint)")

@@ -24,8 +24,13 @@ python -m src.scripts.train \
   --logging no \
   --log_dir ${SAVEDIR} \
   --dataset_root ${DATADIR} \
-  --name mock \
-  --model_name pae \
+  --dataset 'audio_dataset' \
+  --input_channels 1 \
+  --embedding_channels 5 \
+  --time_range 32000 \
+  --window 2.0 \
+  --name PAEInputFlattenedModel \
+  --model_name pae_flat \
   --optimizer adam \
   --optimizer_lr 0.01 \
   --batch_size 16 \

@@ -2,8 +2,9 @@ import torch
 from torch.optim import SGD, Adam
 from torch.optim.lr_scheduler import LambdaLR
 
+from src.datasets.data_processing import AudioDataset
 from src.datasets.dataset import MockDataset
-from src.models import PAE
+from src.models.PAE import PAE, PAEInputFlattened
 
 
 class DotDict:
@@ -64,12 +65,14 @@ def replace_value(d: DotDict, ref, value):
 def resolve_dataset_class(name):
     return {
         'mock_dataset': MockDataset,
+        'audio_dataset': AudioDataset,
     }[name]
 
 
 def resolve_model_class(name, cfg):
     return {
         'pae': PAE(cfg),
+        'pae_flat': PAEInputFlattened(cfg)
     }[name]
 
 

@@ -35,8 +35,8 @@ def preprocess_audio(file_path, lowpass_cutoff=8000, original_rate=44100, target
     return windows
 
 class AudioDataset(Dataset):
-    def __init__(self, audio_dir, split, lowpass_cutoff=8000, original_rate=44100, target_rate=16000, window_length=2):
-        self.audio_dir = audio_dir
+    def __init__(self, dataset_root, split, lowpass_cutoff=8000, original_rate=44100, target_rate=16000, window_length=2):
+        self.audio_dir = dataset_root
         self.split = split
         self.lowpass_cutoff = lowpass_cutoff
         self.original_rate = original_rate
@@ -45,9 +45,9 @@ class AudioDataset(Dataset):
         
         # load and preprocess audio files
         self.data = []
-        for file_name in os.listdir(audio_dir):
+        for file_name in os.listdir(dataset_root):
             if file_name.endswith(".wav"):
-                file_path = os.path.join(audio_dir, file_name)
+                file_path = os.path.join(dataset_root, file_name)
                 self.data.extend(preprocess_audio(file_path, self.lowpass_cutoff, self.original_rate, self.target_rate, self.window_length))
         
         # Split into train, test, and validation
@@ -61,11 +61,11 @@ class AudioDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
-        return torch.tensor(self.data[idx], dtype=torch.float32)
+        return torch.tensor(self.data[idx], dtype=torch.float32).unsqueeze(0)
 
 # Example 
 if __name__ == "__main__":
-    dataset_root = os.path.join(os.getcwd(), "../../data/")
+    dataset_root = os.path.join(os.getcwd(), "data")
     train_dataset = AudioDataset(dataset_root, split='train')
     valid_dataset = AudioDataset(dataset_root, split='valid')
     test_dataset = AudioDataset(dataset_root, split='test')

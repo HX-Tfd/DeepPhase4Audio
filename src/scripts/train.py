@@ -13,20 +13,16 @@ from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTh
 
 from src.utils.rules import check_all_rules
 from src.utils.config import command_line_parser, yaml_config_parser
-from src.experiments.experiment import MockExperiment # don't remove this
+from src.experiments.pae_flattened import PAEInputFlattenedModel # don't remove this
 from src.utils.helpers import get_device_accelerator 
 
 
 def main():
     cfg = command_line_parser() # yaml_config_parser() note that the namespaces are accessed differently
 
-    # Remove previous logs 
-    # if os.path.isdir(cfg.log_dir):
-    #     shutil.rmtree(cfg.log_dir)
-
     # Resolve name task
-    experiment_name = "MockExperiment" 
-    model = eval(experiment_name)(cfg)
+    model_name = cfg.name
+    model = eval(model_name)(cfg)
 
     timestamp = datetime.now().strftime('%m%d-%H%M')
     run_name = f'T{timestamp}_{cfg.name}_{str(uuid.uuid4())[:5]}'
@@ -49,7 +45,7 @@ def main():
         save_last=False,
         save_top_k=1,
         monitor='metrics_MAE',
-        mode='max',
+        mode='min',
     )
 
     # if this doesn't work (e.g. rich install fails) use TQDM progressbar instead (below)
@@ -79,7 +75,7 @@ def main():
     trainer = Trainer(
         logger=[wandb_logger, csv_logger] if cfg.logging else False,
         callbacks=[checkpoint_local_callback, rich_progress_bar],
-        accelerator='cuda',#get_device_accelerator(preferred_accelerator='auto'),
+        accelerator='cpu',#get_device_accelerator(preferred_accelerator='auto'),
         devices=1,
         default_root_dir=cfg.ckpt_save_dir, # directory to save checkpoints at every epoch end
         max_epochs=cfg.num_epochs,
