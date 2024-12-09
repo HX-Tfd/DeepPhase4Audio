@@ -18,4 +18,4 @@ export WANDB_CONFIG_DIR=${TMPDIR}
 
 # Run training
 echo "Start training"
-python -m src.scripts.train --config_file "$(pwd)/configs/mock_config.yaml"
+python -m src.scripts.train --config_file "$(pwd)/configs/baseline.yaml"

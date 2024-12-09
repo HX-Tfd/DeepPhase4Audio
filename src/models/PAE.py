@@ -141,19 +141,19 @@ class PAEInputFlattened(nn.Module):
         self.args = Parameter(torch.from_numpy(np.linspace(-self.window/2, self.window/2, self.time_range, dtype=np.float32)), requires_grad=False)
         self.freqs = Parameter(torch.fft.rfftfreq(self.time_range)[1:] * self.time_range / self.window, requires_grad=False) #Remove DC frequency
 
-        intermediate_channels = 16 # int(self.input_channels/3)
+        intermediate_channels = cfg.intermediate_channels # int(self.input_channels/3)
         
-        self.conv1 = nn.Conv1d(self.input_channels, intermediate_channels, kernel_size=7, stride=1, padding='same', dilation=cfg.dilation, groups=1, bias=True, padding_mode='zeros')
+        self.conv1 = nn.Conv1d(self.input_channels, intermediate_channels, kernel_size=cfg.kernel_size, stride=1, padding='same', dilation=cfg.dilation, groups=1, bias=True, padding_mode='zeros')
         self.norm1 = LN_v2(self.time_range)
-        self.conv2 = nn.Conv1d(intermediate_channels, self.embedding_channels, kernel_size=7, stride=1, padding='same', dilation=cfg.dilation, groups=1, bias=True, padding_mode='zeros')
+        self.conv2 = nn.Conv1d(intermediate_channels, self.embedding_channels, kernel_size=cfg.kernel_size, stride=1, padding='same', dilation=cfg.dilation, groups=1, bias=True, padding_mode='zeros')
 
         self.fc = torch.nn.ModuleList()
         for _ in range(self.embedding_channels):
             self.fc.append(nn.Linear(self.time_range, 2))
 
-        self.deconv1 = nn.Conv1d(self.embedding_channels, intermediate_channels, kernel_size=7, stride=1, padding='same', dilation=cfg.dilation, groups=1, bias=True, padding_mode='zeros')
+        self.deconv1 = nn.Conv1d(self.embedding_channels, intermediate_channels, kernel_size=cfg.kernel_size, stride=1, padding='same', dilation=cfg.dilation, groups=1, bias=True, padding_mode='zeros')
         self.denorm1 = LN_v2(self.time_range)
-        self.deconv2 = nn.Conv1d(intermediate_channels, self.input_channels, kernel_size=7, stride=1, padding='same', dilation=cfg.dilation, groups=1, bias=True, padding_mode='zeros')
+        self.deconv2 = nn.Conv1d(intermediate_channels, self.input_channels, kernel_size=cfg.kernel_size, stride=1, padding='same', dilation=cfg.dilation, groups=1, bias=True, padding_mode='zeros')
 
     #Returns the frequency for a function over a time window in s
     def FFT(self, function, dim):
