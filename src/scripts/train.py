@@ -82,6 +82,7 @@ def main():
         num_sanity_val_steps=1,
         precision=16 if cfg.optimizer_float_16 else 32,
         log_every_n_steps=50,
+        profiler='simple'
         # limit_train_batches=200,
         # limit_val_batches=10,
         # limit_test_batches=10,

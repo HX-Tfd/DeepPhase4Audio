@@ -63,7 +63,7 @@ class PAEInputFlattenedModel(pl.LightningModule):
 
         self.log_dict(
             {
-                'metrics_MAE': metrics_mae
+                'metrics_MAE_val': metrics_mae
             }, on_step=False, on_epoch=True
         )
 
@@ -79,7 +79,13 @@ class PAEInputFlattenedModel(pl.LightningModule):
         if torch.cuda.is_available():
             batch.to(self.device)
         pred, _, _, _ = self.model(batch)
-        ...
+        metrics_mae = self.metric(batch, pred.reshape(pred.shape[0], self.D, self.N))
+
+        self.log_dict(
+            {
+                'metrics_MAE_test': metrics_mae
+            }, on_step=False, on_epoch=True
+        )
 
 
     def test_end(self, outputs):
@@ -107,7 +113,7 @@ class PAEInputFlattenedModel(pl.LightningModule):
     def on_load_checkpoint(self, checkpoint):
         print("Custom logic when loading checkpoint")
         # modify cfg or other attributes if needed
-        self.cfg.some_param = checkpoint["hyper_param"]["some_param"]
+        # self.cfg.some_param = checkpoint["hyper_param"]["some_param"]
 
 
     def _create_train_dataloader(self):

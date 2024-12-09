@@ -5,7 +5,7 @@ import json
 import yaml
 
 from src.utils.constants import *
-from src.utils.helpers import DotDict
+from src.utils.helpers import DotDict, flatten_dict
 
 
 def expandpath(path):
@@ -120,10 +120,13 @@ def yaml_config_parser():
     return cfg
     
     
-def load_config(path):
+def load_config(path, flatten=True):
     with open(path) as stream:
         try:
-            return DotDict(yaml.safe_load(stream))
+            yaml_dict = yaml.safe_load(stream)
+            if flatten:
+                yaml_dict = flatten_dict(yaml_dict)
+            return DotDict(yaml_dict)
         except yaml.YAMLError as exc:
             print("error loading config: ", exc)
 
