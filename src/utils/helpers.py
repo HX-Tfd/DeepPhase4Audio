@@ -1,6 +1,7 @@
 import torch
 from torch.optim import SGD, Adam
 from torch.optim.lr_scheduler import LambdaLR
+import yaml
 
 from src.datasets.data_processing import AudioDataset
 from src.datasets.dataset import MockDataset
@@ -141,3 +142,21 @@ def get_device_accelerator(preferred_accelerator='auto'):
             f"Preferred accelerator '{preferred_accelerator}' is not available. "
             f"Available options: {[k for k, v in available_accelerators.items() if v]}."
         )
+        
+def flatten_dict(d, absolute=False, parent_key='', separator='.'):
+    """
+    Flatten a nested dictionary, keeping only the inner (leaf) values.
+    
+    If absolute = True, the keys will be the absolute access path, otherwise only the key of the leaf
+    """
+    items = []
+    for k, v in d.items():
+        if absolute:
+            new_key = f"{parent_key}{separator}{k}" if parent_key else k
+        else:
+            new_key = f"{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(flatten_dict(v, new_key, separator=separator).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
