@@ -143,17 +143,17 @@ class PAEInputFlattened(nn.Module):
 
         intermediate_channels = 16 # int(self.input_channels/3)
         
-        self.conv1 = nn.Conv1d(self.input_channels, intermediate_channels, kernel_size=7, stride=1, padding='same', dilation=1, groups=1, bias=True, padding_mode='zeros')
+        self.conv1 = nn.Conv1d(self.input_channels, intermediate_channels, kernel_size=7, stride=1, padding='same', dilation=cfg.dilation, groups=1, bias=True, padding_mode='zeros')
         self.norm1 = LN_v2(self.time_range)
-        self.conv2 = nn.Conv1d(intermediate_channels, self.embedding_channels, kernel_size=7, stride=1, padding='same', dilation=1, groups=1, bias=True, padding_mode='zeros')
+        self.conv2 = nn.Conv1d(intermediate_channels, self.embedding_channels, kernel_size=7, stride=1, padding='same', dilation=cfg.dilation, groups=1, bias=True, padding_mode='zeros')
 
         self.fc = torch.nn.ModuleList()
         for _ in range(self.embedding_channels):
             self.fc.append(nn.Linear(self.time_range, 2))
 
-        self.deconv1 = nn.Conv1d(self.embedding_channels, intermediate_channels, kernel_size=7, stride=1, padding='same', dilation=1, groups=1, bias=True, padding_mode='zeros')
+        self.deconv1 = nn.Conv1d(self.embedding_channels, intermediate_channels, kernel_size=7, stride=1, padding='same', dilation=cfg.dilation, groups=1, bias=True, padding_mode='zeros')
         self.denorm1 = LN_v2(self.time_range)
-        self.deconv2 = nn.Conv1d(intermediate_channels, self.input_channels, kernel_size=7, stride=1, padding='same', dilation=1, groups=1, bias=True, padding_mode='zeros')
+        self.deconv2 = nn.Conv1d(intermediate_channels, self.input_channels, kernel_size=7, stride=1, padding='same', dilation=cfg.dilation, groups=1, bias=True, padding_mode='zeros')
 
     #Returns the frequency for a function over a time window in s
     def FFT(self, function, dim):

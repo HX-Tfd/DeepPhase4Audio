@@ -11,21 +11,20 @@ from pytorch_lightning.callbacks import TQDMProgressBar
 from pytorch_lightning.callbacks import RichProgressBar
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
 
-from src.utils.rules import check_all_rules
 from src.utils.config import command_line_parser, yaml_config_parser
 from src.experiments.pae_flattened import PAEInputFlattenedModel # don't remove this
 from src.utils.helpers import get_device_accelerator 
 
 
 def main():
-    cfg = command_line_parser() # yaml_config_parser() note that the namespaces are accessed differently
-
+    cfg = yaml_config_parser() # note that the namespaces are accessed differently
+    print(cfg)
     # Resolve name task
-    model_name = cfg.name
+    model_name = cfg.experiment_name
     model = eval(model_name)(cfg)
 
     timestamp = datetime.now().strftime('%m%d-%H%M')
-    run_name = f'T{timestamp}_{cfg.name}_{str(uuid.uuid4())[:5]}'
+    run_name = f'T{timestamp}_{cfg.run_name}_{str(uuid.uuid4())[:5]}'
 
     """
     Define callbacks
@@ -44,7 +43,7 @@ def main():
         dirpath=os.path.join(cfg.log_dir, 'checkpoints'),
         save_last=False,
         save_top_k=1,
-        monitor='metrics_MAE',
+        monitor='metrics_MAE_val',
         mode='min',
     )
 
