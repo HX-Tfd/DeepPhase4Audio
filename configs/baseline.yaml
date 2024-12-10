@@ -1,5 +1,5 @@
 metadata:
-  run_name: 'PAEInputFlattened_dilation=5_embch=20'
+  run_name: 'PAEInputFlattened_large_kernel_stft'
   log_dir: 'logs'
   logging: True
 
@@ -25,9 +25,9 @@ model_config:
   experiment_name: 'PAEInputFlattenedModel'
   model_name: 'pae_flat'
   input_channels: 1
-  intermediate_channels: 128
+  intermediate_channels: 128 # 16
   embedding_channels: 20
-  kernel_size: 7
+  kernel_size: 51
   time_range: 32000
   window: 2.0
   dilation: 5

@@ -102,6 +102,7 @@ def resolve_lr_scheduler(cfg, optimizer):
             lambda ep: max(1e-6, (1 - ep / cfg.num_epochs) ** cfg.lr_scheduler_power)
         )
     else:
+        print(f"scheduler {cfg.lr_scheduler} is not found or not implemented yet!")
         raise NotImplementedError
     
 

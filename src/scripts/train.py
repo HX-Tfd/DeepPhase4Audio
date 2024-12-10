@@ -1,9 +1,9 @@
 import os
-import shutil
 import uuid
 
 from datetime import datetime
 
+from sklearn.model_selection import ParameterGrid
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger, CSVLogger
@@ -37,13 +37,14 @@ def main():
         wandb_logger = WandbLogger(
             name=run_name,
             project='Deep Learning',
-            )
+            config=cfg
+        )
 
     checkpoint_local_callback = ModelCheckpoint(
         dirpath=os.path.join(cfg.log_dir, 'checkpoints'),
         save_last=False,
         save_top_k=1,
-        monitor='metrics_MAE_val',
+        monitor='metrics/MAE_val',
         mode='min',
     )
 
@@ -66,10 +67,17 @@ def main():
     tqdm_progress_bar = TQDMProgressBar(refresh_rate=10)
 
 
-
     """
-    Define trainer
+    Grid Search
     """
+    param_grid = {
+        'dilation': [3, 5, 7, 9, 11],
+        'lr': [1e-2, 1e-3, 5e-3],
+        'emb_ch': [5, 10, 15, 20],
+        'int_ch': [32, 64, 128, 256]
+    }
+    grid = ParameterGrid(param_grid)
+    
     # Log information to wandb
     trainer = Trainer(
         logger=[wandb_logger, csv_logger] if cfg.logging else False,
@@ -80,7 +88,7 @@ def main():
         max_epochs=cfg.num_epochs,
         num_sanity_val_steps=1,
         precision=16 if cfg.optimizer_float_16 else 32,
-        log_every_n_steps=50,
+        log_every_n_steps=10,
         profiler='simple'
         # limit_train_batches=200,
         # limit_val_batches=10,
