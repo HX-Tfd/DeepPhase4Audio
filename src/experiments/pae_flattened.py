@@ -215,12 +215,16 @@ class PAEInputFlattenedModel(pl.LightningModule):
         """
         assert len(x.shape) == len(y.shape) == 1, "int/out have to be flattened 1D tensors"
         assert len(signal.shape) == 2, "latent signal has to be a 2D tensor"
+        x = x.detach().cpu().numpy()
+        y = y.detach().cpu().numpy()
+        signal = signal.detach().cpu().numpy()
+        
         T = 500 # only show first T steps
 
         fig = plt.figure(figsize=(12, 6))
         plt.subplot(1, 2, 1)
         plt.plot(np.arange(1, T+1), x[:T], label="Input Signal", color="blue")
-        plt.plot(np.arange(1, T+1), y.detach()[:T], label="Reconstructed Signal", color="green")
+        plt.plot(np.arange(1, T+1), y[:T], label="Reconstructed Signal", color="green")
         plt.xlabel("Steps")
         plt.ylabel("Signal")
         plt.title("Input vs Reconstructed Signal")
@@ -230,18 +234,21 @@ class PAEInputFlattenedModel(pl.LightningModule):
         # Plot each of the k signals in a different color
         plt.subplot(1, 2, 2)
         for i in range(self.K):
-            plt.plot(range(100), signal[i, :100].detach(), label=f"Signal {i+1}")
+            plt.plot(range(100), signal[i, :100], label=f"Signal {i+1}")
         plt.xlabel("Time/Index")
         plt.ylabel("Amplitude")
         plt.title(f"{self.K} Latent Signals")
         plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
         plt.legend()
-        plt.grid()
         
-        return self._fig_to_PIL_img(fig)
+        img = self._fig_to_PIL_img(fig)
+        plt.close()
+
+        return img
 
 
     def _visualize_latent_values(self, params: tuple[torch.Tensor], n_bins: int = 100) -> PIL.Image:
+        params = [p.detach().cpu().numpy().flatten() for p in params]
         p, f, a, b = params
 
         # Create subplots for histograms
@@ -249,7 +256,7 @@ class PAEInputFlattenedModel(pl.LightningModule):
 
         # Phase (p)
         plt.subplot(2, 2, 1)
-        plt.hist(p.detach().numpy().flatten(), bins=n_bins, color="blue", alpha=0.7, edgecolor="black")
+        plt.hist(p, bins=n_bins, color="blue", alpha=0.7, edgecolor="black")
         plt.title("Phase (p)")
         plt.xlabel("Phase")
         plt.ylabel("Frequency")
@@ -258,7 +265,7 @@ class PAEInputFlattenedModel(pl.LightningModule):
 
         # Frequency (f)
         plt.subplot(2, 2, 2)
-        plt.hist(f.detach().numpy().flatten(), bins=n_bins, color="green", alpha=0.7, edgecolor="black")
+        plt.hist(f, bins=n_bins, color="green", alpha=0.7, edgecolor="black")
         plt.title("Frequency (f)")
         plt.xlabel("Frequency")
         plt.ylabel("Frequency")
@@ -267,7 +274,7 @@ class PAEInputFlattenedModel(pl.LightningModule):
 
         # Amplitude (a)
         plt.subplot(2, 2, 3)
-        plt.hist(a.detach().numpy().flatten(), bins=n_bins, color="red", alpha=0.7, edgecolor="black")
+        plt.hist(a, bins=n_bins, color="red", alpha=0.7, edgecolor="black")
         plt.title("Amplitude (a)")
         plt.xlabel("Amplitude")
         plt.ylabel("Frequency")
@@ -276,22 +283,27 @@ class PAEInputFlattenedModel(pl.LightningModule):
 
         # Bias (b)
         plt.subplot(2, 2, 4)
-        plt.hist(b.detach().numpy().flatten(), bins=n_bins, color="orange", alpha=0.7, edgecolor="black")
+        plt.hist(b, bins=n_bins, color="orange", alpha=0.7, edgecolor="black")
         plt.title("Bias (b)")
         plt.xlabel("Bias")
         plt.ylabel("Frequency")
         plt.gca().yaxis.set_major_locator(MaxNLocator(integer=True))  
+        
+        img = self._fig_to_PIL_img(fig)
+        plt.close()
 
-        return self._fig_to_PIL_img(fig)
+        return img
     
     
     def _visualize_log_spectogram(self, x, y, n_bins: int = 500) -> PIL.Image:
         """ plot input and output (log) Spectograms """
         assert len(x.shape) == len(y.shape) == 1, "int/out have to be flattened 1D tensors"
+        x = x.detach().cpu().numpy()
+        y = y.detach().cpu().numpy()
          
         # Compute Fourier Transforms
-        input_fft = np.fft.fft(x.numpy())
-        reconstructed_fft = np.fft.fft(y.detach().numpy())
+        input_fft = np.fft.fft(x)
+        reconstructed_fft = np.fft.fft(y)
 
         # Compute log magnitudes
         log_magnitude_input = np.log1p(np.abs(input_fft)[:self.N // 2])
@@ -311,8 +323,11 @@ class PAEInputFlattenedModel(pl.LightningModule):
         plt.xlabel("Frequency")
         plt.legend()
         plt.grid()
+        
+        img = self._fig_to_PIL_img(fig)
+        plt.close()
 
-        return self._fig_to_PIL_img(fig)
+        return img
     
         
     @staticmethod

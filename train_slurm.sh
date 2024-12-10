@@ -2,17 +2,16 @@
 #SBATCH --ntasks=1                     
 #SBATCH --nodes=1 
 #SBATCH --account=dl
-#SBATCH --output=logs/test_output.out
+#SBATCH --output=logs/%j.out
 #SBATCH --mem-per-cpu=2G
 #SBATCH --time=00-6:00:00 
 
 # Note that specifying TRES per node and task is not allowed on this cluster
 
 # exit when any command fails
-# set -e
+set -e
 
 # Add environ var
-export DATA='..'
 export TMPDIR='tmp'
 export SAVEDIR='logs'
 export DATADIR='data'
@@ -30,18 +29,4 @@ export WANDB_CONFIG_DIR=${TMPDIR}
 
 # Run training
 echo "Start training"
-
-python -m src.scripts.train \
-  --logging no \
-  --log_dir ${SAVEDIR} \
-  --dataset_root ${DATADIR} \
-  --name mock \
-  --model_name pae \
-  --optimizer adam \
-  --optimizer_lr 0.01 \
-  --batch_size 16 \
-  --num_epochs 16 \
-  --workers 0 \
-  --workers_validation 0 \
-  --batch_size_validation 4 \
-  --optimizer_float_16 no \
+python -m src.scripts.train --config_file "configs/baseline.yaml"
