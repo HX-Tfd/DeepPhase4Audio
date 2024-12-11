@@ -1,9 +1,11 @@
 import torch
 from torch.optim import SGD, Adam
 from torch.optim.lr_scheduler import LambdaLR
+import yaml
 
+from src.datasets.data_processing import AudioDataset
 from src.datasets.dataset import MockDataset
-from src.models import PAE
+from src.models.PAE import AE, PAE, PAEInputFlattened
 
 
 class DotDict:
@@ -30,6 +32,17 @@ class DotDict:
             else:
                 result[key] = value
         return result
+    
+    def __getattr__(self, name):
+        if name in self.__dict__:
+            return self.__dict__[name]
+        raise AttributeError(f"'DotDict' object has no attribute '{name}'")
+
+    def __setattr__(self, name, value):
+        if isinstance(value, dict):
+            value = DotDict(value)
+        self.__dict__[name] = value
+    
 
 
 def replace_value(d: DotDict, ref, value):
@@ -64,12 +77,15 @@ def replace_value(d: DotDict, ref, value):
 def resolve_dataset_class(name):
     return {
         'mock_dataset': MockDataset,
+        'audio_dataset': AudioDataset,
     }[name]
 
 
 def resolve_model_class(name, cfg):
     return {
         'pae': PAE(cfg),
+        'pae_flat': PAEInputFlattened(cfg),
+        'ae': AE(cfg)
     }[name]
 
 
@@ -98,6 +114,7 @@ def resolve_lr_scheduler(cfg, optimizer):
             lambda ep: max(1e-6, (1 - ep / cfg.num_epochs) ** cfg.lr_scheduler_power)
         )
     else:
+        print(f"scheduler {cfg.lr_scheduler} is not found or not implemented yet!")
         raise NotImplementedError
     
 
@@ -138,3 +155,21 @@ def get_device_accelerator(preferred_accelerator='auto'):
             f"Preferred accelerator '{preferred_accelerator}' is not available. "
             f"Available options: {[k for k, v in available_accelerators.items() if v]}."
         )
+        
+def flatten_dict(d, absolute=False, parent_key='', separator='.'):
+    """
+    Flatten a nested dictionary, keeping only the inner (leaf) values.
+    
+    If absolute = True, the keys will be the absolute access path, otherwise only the key of the leaf
+    """
+    items = []
+    for k, v in d.items():
+        if absolute:
+            new_key = f"{parent_key}{separator}{k}" if parent_key else k
+        else:
+            new_key = f"{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(flatten_dict(v, new_key, separator=separator).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)

@@ -5,7 +5,7 @@ import json
 import yaml
 
 from src.utils.constants import *
-from src.utils.helpers import DotDict
+from src.utils.helpers import DotDict, flatten_dict
 
 
 def expandpath(path):
@@ -73,7 +73,7 @@ def command_line_parser():
     Dataset config
     """
     parser.add_argument(
-        '--dataset', type=str, default='mock_dataset', choices=['mock_dataset'], help='Dataset name') # TODO: change the dataset 
+        '--dataset', type=str, default='audio_dataset', choices=['mock_dataset', 'audio_dataset'], help='Dataset name') 
 
 
     """
@@ -82,7 +82,7 @@ def command_line_parser():
     """
     parser.add_argument(
         '--model_name', type=str, default='pae',
-        choices=['pae'],
+        choices=['pae', 'pae_flat'],
         help='name of the model')
     parser.add_argument(
         '--input_channels', type=int, default=input_channels, help="number of channels along time in the input data (here 3*J as XYZ-component of each joint)")
@@ -111,7 +111,7 @@ def command_line_parser():
     return cfg
 
 
-def yaml_config_parser():
+def yaml_config_parser() -> DotDict:
     parser = argparse.ArgumentParser(description="")
     parser.add_argument(
         '--config_file', type=str, default='../configs/mock_config.yaml', help='path to yaml config')
@@ -120,10 +120,13 @@ def yaml_config_parser():
     return cfg
     
     
-def load_config(path):
+def load_config(path, flatten=True) -> DotDict:
     with open(path) as stream:
         try:
-            return DotDict(yaml.safe_load(stream))
+            yaml_dict = yaml.safe_load(stream)
+            if flatten:
+                yaml_dict = flatten_dict(yaml_dict)
+            return DotDict(yaml_dict)
         except yaml.YAMLError as exc:
             print("error loading config: ", exc)
 
