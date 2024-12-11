@@ -32,6 +32,17 @@ class DotDict:
             else:
                 result[key] = value
         return result
+    
+    def __getattr__(self, name):
+        if name in self.__dict__:
+            return self.__dict__[name]
+        raise AttributeError(f"'DotDict' object has no attribute '{name}'")
+
+    def __setattr__(self, name, value):
+        if isinstance(value, dict):
+            value = DotDict(value)
+        self.__dict__[name] = value
+    
 
 
 def replace_value(d: DotDict, ref, value):
