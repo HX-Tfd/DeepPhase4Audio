@@ -219,12 +219,71 @@ class PAEInputFlattened(nn.Module):
 
         return y, latent, signal, params
     
+    
+class AE(PAE):
+    """
+    The PAE model with the latent construct removed
+    """
+    def __init__(self, cfg):
+        super(AE, self).__init__(cfg)
+        self.input_channels = cfg.input_channels
+        self.embedding_channels = cfg.embedding_channels
+        self.time_range = cfg.time_range
+        self.window = cfg.window
+
+        self.tpi = Parameter(torch.from_numpy(np.array([2.0*np.pi], dtype=np.float32)), requires_grad=False)
+        self.args = Parameter(torch.from_numpy(np.linspace(-self.window/2, self.window/2, self.time_range, dtype=np.float32)), requires_grad=False)
+        self.freqs = Parameter(torch.fft.rfftfreq(self.time_range)[1:] * self.time_range / self.window, requires_grad=False) #Remove DC frequency
+
+        intermediate_channels = cfg.intermediate_channels # int(self.input_channels/3)
+        
+        self.conv1 = nn.Conv1d(self.input_channels, intermediate_channels, kernel_size=cfg.kernel_size, stride=1, padding='same', dilation=cfg.dilation, groups=1, bias=True, padding_mode='zeros')
+        self.norm1 = LN_v2(self.time_range)
+        self.conv2 = nn.Conv1d(intermediate_channels, self.embedding_channels, kernel_size=cfg.kernel_size, stride=1, padding='same', dilation=cfg.dilation, groups=1, bias=True, padding_mode='zeros')
+
+        self.fc = torch.nn.ModuleList()
+        for _ in range(self.embedding_channels):
+            self.fc.append(nn.Linear(self.time_range, 2))
+
+        self.deconv1 = nn.Conv1d(self.embedding_channels, intermediate_channels, kernel_size=cfg.kernel_size, stride=1, padding='same', dilation=cfg.dilation, groups=1, bias=True, padding_mode='zeros')
+        self.denorm1 = LN_v2(self.time_range)
+        self.deconv2 = nn.Conv1d(intermediate_channels, self.input_channels, kernel_size=cfg.kernel_size, stride=1, padding='same', dilation=cfg.dilation, groups=1, bias=True, padding_mode='zeros')
+
+
+    def forward(self, x):
+        y = x
+
+        #Signal Embedding
+        y = y.reshape(y.shape[0], self.input_channels, self.time_range)
+
+        y = self.conv1(y)
+        y = self.norm1(y)
+        y = F.elu(y)
+
+        y = self.conv2(y)
+
+        latent = y #Save latent for returning
+
+        #Signal Reconstruction
+        y = self.deconv1(y)
+        y = self.denorm1(y)
+        y = F.elu(y)
+
+        y = self.deconv2(y)
+
+        y = y.reshape(y.shape[0], self.input_channels*self.time_range)
+
+        return y, latent
+    
 
 if __name__ == "__main__":
     from src.utils.helpers import DotDict
     cfg = DotDict({
         'input_channels': 1,
         'embedding_channels': 5,
+        'intermediate_channels': 16,
+        'kernel_size': 11,
+        'dilation': 5,
         'time_range': 32000,
         'window': 2.0
     })
@@ -234,5 +293,9 @@ if __name__ == "__main__":
     x = torch.rand(16, 32000, 1)
     y, _, _, _ = model(x)
     print(y)
+    
+    ae_model = AE(cfg)
+    x = torch.rand(16, 32000, 1)
+    y, _ = ae_model(x)
 
 
