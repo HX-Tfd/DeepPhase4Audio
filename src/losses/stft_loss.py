@@ -52,9 +52,10 @@ class SpectralConvergengeLoss(torch.nn.Module):
 class LogSTFTMagnitudeLoss(torch.nn.Module):
     """Log STFT magnitude loss module."""
 
-    def __init__(self):
+    def __init__(self, loss_type='l1'):
         """Initilize los STFT magnitude loss module."""
         super(LogSTFTMagnitudeLoss, self).__init__()
+        self.loss_type = loss_type
 
     def forward(self, x_mag, y_mag):
         """Calculate forward propagation.
@@ -64,7 +65,12 @@ class LogSTFTMagnitudeLoss(torch.nn.Module):
         Returns:
             Tensor: Log STFT magnitude loss value.
         """
-        return F.l1_loss(torch.log(y_mag), torch.log(x_mag))
+        if self.loss_type == 'l1':
+            return F.l1_loss(torch.log(y_mag), torch.log(x_mag))
+        elif self.loss_type == 'l2':
+            return F.mse_loss(torch.log(y_mag), torch.log(x_mag))
+        else:
+            raise NotImplementedError(f"Log STFT Magnitude Loss for type {self.loss_type} not supported")
 
 
 class STFTLoss(torch.nn.Module):
@@ -78,7 +84,7 @@ class STFTLoss(torch.nn.Module):
         self.win_length = win_length
         self.register_buffer("window", getattr(torch, window)(win_length))
         self.spectral_convergenge_loss = SpectralConvergengeLoss()
-        self.log_stft_magnitude_loss = LogSTFTMagnitudeLoss()
+        self.log_stft_magnitude_loss = LogSTFTMagnitudeLoss(loss_type='l1')
 
     def forward(self, x, y):
         """Calculate forward propagation.
