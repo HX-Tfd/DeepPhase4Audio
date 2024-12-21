@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader
 import wandb
 
 from src.datasets.definitions import SPLIT_TRAIN, SPLIT_TEST, SPLIT_VALID
-from src.utils.metrics import simple_metric
+from src.utils.metrics import MAE
 from src.utils.helpers import resolve_dataset_class, resolve_lr_scheduler, resolve_model_class, resolve_optimizer
 from src.losses.stft_loss import STFTLoss, MultiResolutionSTFTLoss
 
@@ -43,7 +43,7 @@ class PAEInputFlattenedModel(pl.LightningModule):
         self._instantiate_model()
         self.loss = nn.MSELoss()
         self.stft_loss = STFTLoss()
-        self.metric = simple_metric
+        self.metric = MAE
 
     def training_step(self, batch, batch_idx):
         if torch.cuda.is_available():

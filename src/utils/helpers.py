@@ -3,9 +3,10 @@ from torch.optim import SGD, Adam
 from torch.optim.lr_scheduler import LambdaLR
 import yaml
 
+from src.models.PAE import AE, PAE, PAEInputFlattened
 from src.datasets.data_processing import AudioDataset
 from src.datasets.dataset import MockDataset
-from src.models.PAE import AE, PAE, PAEInputFlattened
+from src.models.VQ_PAE import VQ_AE
 
 
 class DotDict:
@@ -85,7 +86,8 @@ def resolve_model_class(name, cfg):
     return {
         'pae': PAE(cfg),
         'pae_flat': PAEInputFlattened(cfg),
-        'ae': AE(cfg)
+        'ae': AE(cfg), 
+        # 'vq_pae': VQ_AE(cfg)
     }[name]
 
 

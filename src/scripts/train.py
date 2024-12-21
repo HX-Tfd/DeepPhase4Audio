@@ -14,6 +14,7 @@ from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTh
 from src.utils.config import command_line_parser, yaml_config_parser
 from src.experiments.pae_flattened import PAEInputFlattenedModel # don't remove this
 from src.experiments.ae import AEModel
+# from src.experiments.vq_pae import VQ_PAEModel
 from src.utils.helpers import get_device_accelerator 
 
 
