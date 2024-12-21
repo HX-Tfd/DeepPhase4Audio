@@ -73,22 +73,37 @@ def main():
     
     The keys have to match the params in the cfg 
     """
-    trainer = Trainer(
-        logger=[wandb_logger, csv_logger] if cfg.metadata.logging else False,
-        callbacks=[checkpoint_local_callback, rich_progress_bar],
-        accelerator=get_device_accelerator(preferred_accelerator='cpu'),
-        devices=1,
-        default_root_dir=cfg.training_config.ckpt_save_dir, 
-        max_epochs=cfg.training_config.num_epochs,
-        num_sanity_val_steps=1,
-        precision=16 if cfg.training_config.optimizer_float_16 else 32,
-        log_every_n_steps=10,
-        profiler='simple'
-    )
+    # TODO: change the namespace accordingly if we don't flatten
+    param_grid = {
+        'model_config.dilation': [3, 5, 7, 9, 11],
+        'training_config.optimizer_lr': [1e-2, 1e-3, 5e-3],
+        'model_config.embedding_channels': [5, 10, 15, 20],
+        'model_config.intermediate_channels': [32, 64, 128, 256]
+    }
+    grid = ParameterGrid(param_grid)
+    for params in list(grid):
+        # update params
+        for k, v in params.items():
+            assert hasattr(cfg, k), f"parameter \"{k}\" does not exist in the config"
+            exec(f"cfg.{k} = {v}")
+        print(cfg)
+            
+        trainer = Trainer(
+            logger=[wandb_logger, csv_logger] if cfg.metadata.logging else False,
+            callbacks=[checkpoint_local_callback, rich_progress_bar],
+            accelerator=get_device_accelerator(preferred_accelerator='cpu'),
+            devices=1,
+            default_root_dir=cfg.training_config.ckpt_save_dir, 
+            max_epochs=cfg.training_config.num_epochs,
+            num_sanity_val_steps=1,
+            precision=16 if cfg.training_config.optimizer_float_16 else 32,
+            log_every_n_steps=10,
+            profiler='simple'
+        )
 
-    # train and test the model
-    trainer.fit(model, ckpt_path=cfg.training_config.resume)
-    trainer.test(model)
+        # train and test the model
+        trainer.fit(model, ckpt_path=cfg.training_config.resume)
+        trainer.test(model)
 
 
 if __name__ == '__main__':

@@ -1,7 +1,7 @@
 metadata:
   run_name: 'AE_baseline'
   log_dir: 'logs'
-  logging: True
+  logging: False
 
 dataset_config:
   dataset: 'audio_dataset'
@@ -20,6 +20,7 @@ training_config:
   lr_scheduler: 'poly'
   lr_scheduler_power: 0.9
   ckpt_save_dir: 'logs/checkpoints'
+  resume: null
 
 model_config:
   experiment_name: 'AEModel'

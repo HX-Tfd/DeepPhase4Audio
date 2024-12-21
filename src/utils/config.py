@@ -111,16 +111,16 @@ def command_line_parser():
     return cfg
 
 
-def yaml_config_parser() -> DotDict:
+def yaml_config_parser(flatten_config=False) -> DotDict:
     parser = argparse.ArgumentParser(description="")
     parser.add_argument(
         '--config_file', type=str, default='../configs/mock_config.yaml', help='path to yaml config')
     args, _ = parser.parse_known_args()
-    cfg = load_config(args.config_file)
+    cfg = load_config(args.config_file, flatten=flatten_config)
     return cfg
     
     
-def load_config(path, flatten=True) -> DotDict:
+def load_config(path, flatten) -> DotDict:
     with open(path) as stream:
         try:
             yaml_dict = yaml.safe_load(stream)

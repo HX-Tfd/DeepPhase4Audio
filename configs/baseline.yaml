@@ -1,7 +1,7 @@
 metadata:
   run_name: 'PAEInputFlattened_large_kernel_stft'
   log_dir: 'logs'
-  logging: True
+  logging: False
 
 dataset_config:
   dataset: 'audio_dataset'
@@ -9,7 +9,7 @@ dataset_config:
   resume: null
 
 training_config:
-  num_epochs: 50
+  num_epochs: 1
   batch_size: 16
   batch_size_validation: 16
   optimizer: 'adam'
@@ -20,12 +20,13 @@ training_config:
   lr_scheduler: 'poly'
   lr_scheduler_power: 0.9
   ckpt_save_dir: 'logs/checkpoints'
+  resume: null
 
 model_config:
   experiment_name: 'PAEInputFlattenedModel'
   model_name: 'pae_flat'
   input_channels: 1
-  intermediate_channels: 128 # 16
+  intermediate_channels: 16 # 16
   embedding_channels: 20
   kernel_size: 51
   time_range: 32000
