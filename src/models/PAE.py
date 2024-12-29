@@ -10,6 +10,8 @@ from torch.nn.parameter import Parameter
 import torch.nn as nn
 import torch.nn.functional as F
 
+from src.utils.model_utils import count_model_params
+
 from .modules import LN_v2, positional_encoding
 
 class PAE(nn.Module):
@@ -291,30 +293,34 @@ class PAEInputFlattened(nn.Module):
 
         intermediate_channels = cfg.intermediate_channels # int(self.input_channels/3)
         
-        self.enc_layers = cfg.enc_layers
-        self.dec_layers = cfg.dec_layers
+        self.enc_dilation_rates = cfg.enc_dilation_rates
+        self.dec_dilation_rates = cfg.dec_dilation_rates
+        self.enc_kernel_sizes = cfg.enc_kernel_sizes
+        self.dec_kernel_sizes = cfg.dec_kernel_sizes
+        self.enc_layers = len(self.enc_dilation_rates)
+        self.dec_layers = len(self.dec_dilation_rates)
         enc_modules, dec_modules = [], []
         for i in range(self.enc_layers):
             if i == 0:
-                enc_modules.append(nn.Conv1d(self.input_channels, intermediate_channels, kernel_size=cfg.kernel_size, stride=1, padding='same', dilation=cfg.dilation, groups=1, bias=True, padding_mode='zeros'))
+                enc_modules.append(nn.Conv1d(self.input_channels, intermediate_channels, kernel_size=self.enc_kernel_sizes[i], stride=1, padding='same', dilation=self.enc_dilation_rates[i], groups=1, bias=True, padding_mode='zeros'))
                 enc_modules.append(LN_v2(self.time_range))
                 enc_modules.append(nn.ELU())
             elif i == self.enc_layers - 1:
-                enc_modules.append(nn.Conv1d(intermediate_channels, self.embedding_channels, kernel_size=cfg.kernel_size, stride=1, padding='same', dilation=cfg.dilation, groups=1, bias=True, padding_mode='zeros'))
+                enc_modules.append(nn.Conv1d(intermediate_channels, self.embedding_channels, kernel_size=self.enc_kernel_sizes[i], stride=1, padding='same', dilation=self.enc_dilation_rates[i], groups=1, bias=True, padding_mode='zeros'))
             else:
-                enc_modules.append(nn.Conv1d(intermediate_channels, intermediate_channels, kernel_size=cfg.kernel_size, stride=1, padding='same', dilation=cfg.dilation, groups=1, bias=True, padding_mode='zeros'))
+                enc_modules.append(nn.Conv1d(intermediate_channels, intermediate_channels, kernel_size=self.enc_kernel_sizes[i], stride=1, padding='same', dilation=self.enc_dilation_rates[i], groups=1, bias=True, padding_mode='zeros'))
                 enc_modules.append(LN_v2(self.time_range))
                 enc_modules.append(nn.ELU())
                 
         for i in range(self.dec_layers):
             if i == 0:
-                dec_modules.append(nn.Conv1d(self.embedding_channels, intermediate_channels, kernel_size=cfg.kernel_size, stride=1, padding='same', dilation=cfg.dilation, groups=1, bias=True, padding_mode='zeros'))
+                dec_modules.append(nn.Conv1d(self.embedding_channels, intermediate_channels, kernel_size=self.dec_kernel_sizes[i], stride=1, padding='same', dilation=self.dec_dilation_rates[i], groups=1, bias=True, padding_mode='zeros'))
                 dec_modules.append(LN_v2(self.time_range))
                 dec_modules.append(nn.ELU())
             elif i == self.enc_layers - 1:
-                dec_modules.append(nn.Conv1d(intermediate_channels, self.input_channels, kernel_size=cfg.kernel_size, stride=1, padding='same', dilation=cfg.dilation, groups=1, bias=True, padding_mode='zeros'))
+                dec_modules.append(nn.Conv1d(intermediate_channels, self.input_channels, kernel_size=self.dec_kernel_sizes[i], stride=1, padding='same', dilation=self.dec_dilation_rates[i], groups=1, bias=True, padding_mode='zeros'))
             else:
-                dec_modules.append(nn.Conv1d(intermediate_channels, intermediate_channels, kernel_size=cfg.kernel_size, stride=1, padding='same', dilation=cfg.dilation, groups=1, bias=True, padding_mode='zeros'))
+                dec_modules.append(nn.Conv1d(intermediate_channels, intermediate_channels, kernel_size=self.dec_kernel_sizes[i], stride=1, padding='same', dilation=self.dec_dilation_rates[i], groups=1, bias=True, padding_mode='zeros'))
                 dec_modules.append(LN_v2(self.time_range))
                 dec_modules.append(nn.ELU())
         
@@ -325,15 +331,15 @@ class PAEInputFlattened(nn.Module):
         for _ in range(self.embedding_channels):
             self.fc.append(nn.Linear(self.time_range, 2))
 
-
-        fft_mlp_int_channels = 128
-        in_length = self.time_range // 2
-        self.fft_mlp = nn.Sequential(
-            nn.Linear(in_length, in_length),
-            nn.LeakyReLU(),
-            nn.Linear(in_length, 1),
-            nn.ELU()
-        )
+        if self.use_fft_mlp:
+            fft_mlp_int_channels = 128
+            in_length = self.time_range // 2
+            self.fft_mlp = nn.Sequential(
+                nn.Linear(in_length, in_length),
+                nn.LeakyReLU(),
+                nn.Linear(in_length, 1),
+                nn.ELU()
+            )
 
     #Returns the frequency for a function over a time window in s
     def FFT(self, function, dim):
@@ -404,16 +410,17 @@ if __name__ == "__main__":
         'input_channels': 1,
         'embedding_channels': 15,
         'intermediate_channels': 16,
-        'kernel_size': 11,
-        'dilation': 5,
         'time_range': 32000,
         'window': 2.0,
         'fft_mlp': False,
-        'enc_layers': 4,
-        'dec_layers': 4
+        'enc_dilation_rates': [9, 7, 5],
+        'enc_kernel_sizes': [51, 21, 7],
+        'dec_dilation_rates': [5, 7, 9],
+        'dec_kernel_sizes': [7, 21, 51]
     })
     model = PAEInputFlattened(cfg)
     print(model)
+    print("trainable model parameters: ", count_model_params(model))
     
     x = torch.rand(32, 2, 32000)
     y, _, _, _ = model(x)
