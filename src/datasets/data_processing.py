@@ -28,10 +28,12 @@ def preprocess_audio(file_path, lowpass_cutoff=8000, original_rate=44100, target
     window_size = target_rate * window_length
     step_size = window_size // 2  # 50% overlap
 
-    windows = [
-        downsampled_audio[i:i + window_size]
-        for i in range(0, len(downsampled_audio) - window_size + 1, step_size)
-    ]
+    windows = []
+    for i in range(0, len(downsampled_audio) - window_size + 1, step_size):
+        s = downsampled_audio[i:i + window_size]
+        s_pos = np.arange(i, i+window_size)
+        windows.append(np.stack((s, s_pos)))
+    
     return windows
 
 class AudioDataset(Dataset):
@@ -61,9 +63,9 @@ class AudioDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
-        return torch.tensor(self.data[idx], dtype=torch.float32).unsqueeze(0)
+        return torch.tensor(self.data[idx], dtype=torch.float32)
 
-# Example 
+
 if __name__ == "__main__":
     dataset_root = os.path.join(os.getcwd(), "data")
     train_dataset = AudioDataset(dataset_root, split='train')
@@ -76,4 +78,6 @@ if __name__ == "__main__":
 
     # Access a sample
     sample = train_dataset[0]
-    print(f"Sample shape: {sample.shape}")
+    print(f"Sample shape: {sample.shape}") # B, 2, 32000
+    
+    # print(sample.squeeze(0).norm)

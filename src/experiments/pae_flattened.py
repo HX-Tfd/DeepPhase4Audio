@@ -27,7 +27,7 @@ class PAEInputFlattenedModel(pl.LightningModule):
         self.model_config = cfg.model_config
         self.worker_config = cfg.worker_config
         
-        
+        # D = D+1 when using PE
         self.D, self.N, self.K = self.model_config.input_channels, self.model_config.time_range, self.model_config.embedding_channels
         dataset_class = resolve_dataset_class(self.dataset_cfg.dataset)
         self.datasets = {
@@ -51,7 +51,7 @@ class PAEInputFlattenedModel(pl.LightningModule):
         pred, _, _, _ = self.model(batch) # output is (y, latent, signal, param)
         
         if self.D == 1:
-            batch = batch.reshape(batch.shape[0], self.N)
+            batch = batch[:, 0, :].reshape(batch.shape[0], self.N)
             pred = pred.reshape(pred.shape[0], self.N)
         else:
             pred = pred.reshape(pred.shape[0], self.D, self.N)
@@ -87,7 +87,7 @@ class PAEInputFlattenedModel(pl.LightningModule):
         pred, latent, signal, params = self.model(batch)
         
         if self.D == 1:
-            batch = batch.reshape(batch.shape[0], self.N)
+            batch = batch[:, 0, :].reshape(batch.shape[0], self.N)
             pred = pred.reshape(pred.shape[0], self.N)
         else:
             pred = pred.reshape(pred.shape[0], self.D, self.N)

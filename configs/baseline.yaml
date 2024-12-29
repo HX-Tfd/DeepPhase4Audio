@@ -1,7 +1,7 @@
 metadata:
-  run_name: 'PAEInputFlattened_large_kernel_stft'
+  run_name: 'PAEInputFlattened_FFT_MLP_mlp'
   log_dir: 'logs'
-  logging: False
+  logging: Yes
 
 dataset_config:
   dataset: 'audio_dataset'
@@ -9,11 +9,11 @@ dataset_config:
   resume: null
 
 training_config:
-  num_epochs: 1
+  num_epochs: 50
   batch_size: 16
   batch_size_validation: 16
   optimizer: 'adam'
-  optimizer_lr: 0.01
+  optimizer_lr: 0.001
   optimizer_momentum: 0.9
   optimizer_weight_decay: 0.001
   optimizer_float_16: False
@@ -26,12 +26,15 @@ model_config:
   experiment_name: 'PAEInputFlattenedModel'
   model_name: 'pae_flat'
   input_channels: 1
-  intermediate_channels: 16 # 16
-  embedding_channels: 20
+  intermediate_channels: 64 # 16
+  embedding_channels: 5
   kernel_size: 51
   time_range: 32000
   window: 2.0
   dilation: 5
+  fft_mlp: False
+  enc_layers: 3
+  dec_layers: 3
 
 worker_config:
   workers: 0
