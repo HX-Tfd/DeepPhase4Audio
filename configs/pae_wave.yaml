@@ -1,0 +1,42 @@
+metadata:
+  run_name: 'PAEWave_dryrun'
+  log_dir: 'logs'
+  logging: False
+
+dataset_config:
+  dataset: 'audio_dataset'
+  dataset_root: 'data/test'
+  resume: null
+
+training_config:
+  num_epochs: 10
+  batch_size: 10
+  batch_size_validation: 10
+  optimizer: 'adam'
+  optimizer_lr: 0.01
+  optimizer_momentum: 0.9
+  optimizer_weight_decay: 0.001
+  optimizer_float_16: False
+  lr_scheduler: 'poly'
+  lr_scheduler_power: 0.9
+  ckpt_save_dir: 'logs/checkpoints'
+
+model_config:
+  experiment_name: 'PAEWaveModel'
+  model_name: 'pae_wave'
+  input_channels: 1
+  intermediate_channels: 24 
+  embedding_channels: 32 
+  kernel_size: 51
+  time_range: 32000
+  window: 2.0
+  dilation: 1
+  residual_channels: 16 # NEW for wavenet
+  dilation_channels: 24  # NEW for wavenet
+  skip_channels: 1  # NEW for wavenet
+  layers: 4 # NEW for wavenet 
+  blocks: 2   # NEW for wavenet
+
+worker_config:
+  workers: 7
+  workers_validation: 7

@@ -1,0 +1,37 @@
+metadata:
+  run_name: 'GridSearch'
+  log_dir: 'logs'
+  logging: True
+
+dataset_config:
+  dataset: 'audio_dataset'
+  dataset_root: 'data'
+  resume: null
+
+training_config:
+  num_epochs: 70
+  batch_size: 16
+  batch_size_validation: 16
+  optimizer: 'adam'
+  optimizer_lr: 0.01
+  optimizer_momentum: 0.9
+  optimizer_weight_decay: 0.001
+  optimizer_float_16: False
+  lr_scheduler: 'poly'
+  lr_scheduler_power: 0.9
+  ckpt_save_dir: 'logs/checkpoints'
+
+model_config:
+  experiment_name: 'PAEInputFlattenedModel'
+  model_name: 'pae_flat'
+  input_channels: 1
+  intermediate_channels: 128 # 16
+  embedding_channels: 20
+  kernel_size: 51
+  time_range: 32000
+  window: 2.0
+  dilation: 21
+
+worker_config:
+  workers: 0
+  workers_validation: 0
