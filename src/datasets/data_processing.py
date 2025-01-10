@@ -31,8 +31,8 @@ def preprocess_audio(file_path, lowpass_cutoff=8000, original_rate=44100, target
     windows = []
     for i in range(0, len(downsampled_audio) - window_size + 1, step_size):
         s = downsampled_audio[i:i + window_size]
-        s_pos = np.arange(i, i+window_size)
-        windows.append(np.stack((s, s_pos)))
+        # s_pos = np.arange(i, i+window_size)
+        windows.append(s)
     
     return windows
 
@@ -78,6 +78,7 @@ if __name__ == "__main__":
 
     # Access a sample
     sample = train_dataset[0]
-    print(f"Sample shape: {sample.shape}") # B, 2, 32000
+    print(f"Sample shape: {sample.shape}") # B, 2, 32000 if using pos
+    print(sample)
     
     # print(sample.squeeze(0).norm)

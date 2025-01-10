@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torch.nn.utils import weight_norm
 
 
 class LN_v2(nn.Module):
@@ -41,3 +42,37 @@ def positional_encoding(pos: torch.Tensor, d_model=1):  # pos is a tensor of sha
         pe[:, 1::2] = torch.cos(position * div_term)  
 
     return pe.unsqueeze(0).expand(B, -1, -1).squeeze()  # (B, L, d_model)
+
+
+class Snake(nn.Module):
+    def __init__(self, alpha=0.5):
+        super().__init__()
+        self.alpha = alpha
+        
+    def forward(self, x):
+        return x + (1 / self.alpha) * torch.sin(self.alpha * x) ** 2
+    
+    
+def WNConv1d(*args, **kwargs):
+    return weight_norm(nn.Conv1d(*args, **kwargs))
+
+
+def WNConvTranspose1d(*args, **kwargs):
+    return weight_norm(nn.ConvTranspose1d(*args, **kwargs))
+
+
+@torch.jit.script
+def snake(x, alpha):
+    shape = x.shape
+    x = x.reshape(shape[0], shape[1], -1)
+    x = x + (alpha + 1e-9).reciprocal() * torch.sin(alpha * x).pow(2)
+    x = x.reshape(shape)
+    return x
+
+class Snake1d(nn.Module):
+    def __init__(self, channels):
+        super().__init__()
+        self.alpha = nn.Parameter(torch.ones(1, channels, 1))
+
+    def forward(self, x):
+        return snake(x, self.alpha)

@@ -1,5 +1,5 @@
 metadata:
-  run_name: 'PAEInputFlattened_FFT_MLP_mlp'
+  run_name: 'PAE_Snake'
   log_dir: 'logs'
   logging: Yes
 
@@ -27,14 +27,14 @@ model_config:
   model_name: 'pae_flat'
   input_channels: 1
   intermediate_channels: 64 # 16
-  embedding_channels: 5
-  kernel_size: 51
+  embedding_channels: 16
   time_range: 32000
   window: 2.0
-  dilation: 5
   fft_mlp: False
-  enc_layers: 3
-  dec_layers: 3
+  enc_dilation_rates: [9, 5, 1]
+  enc_kernel_sizes: [21, 11, 5]
+  dec_dilation_rates: [1, 5, 9]
+  dec_kernel_sizes: [5, 11, 21]
 
 worker_config:
   workers: 0

@@ -12,7 +12,7 @@ import torch.nn.functional as F
 
 from src.utils.model_utils import count_model_params
 
-from .modules import LN_v2, positional_encoding
+from .modules import LN_v2, Snake, positional_encoding
 
 class PAE(nn.Module):
     """
@@ -285,7 +285,8 @@ class PAEInputFlattened(nn.Module):
         self.embedding_channels = cfg.embedding_channels
         self.time_range = cfg.time_range
         self.window = cfg.window
-        self.use_fft_mlp = cfg.fft_mlp
+        self.use_fft_mlp = cfg.use_fft_mlp
+        self.activation = Snake() # nn.ELU()
 
         self.tpi = Parameter(torch.from_numpy(np.array([2.0*np.pi], dtype=np.float32)), requires_grad=False)
         self.args = Parameter(torch.from_numpy(np.linspace(-self.window/2, self.window/2, self.time_range, dtype=np.float32)), requires_grad=False)
@@ -304,25 +305,25 @@ class PAEInputFlattened(nn.Module):
             if i == 0:
                 enc_modules.append(nn.Conv1d(self.input_channels, intermediate_channels, kernel_size=self.enc_kernel_sizes[i], stride=1, padding='same', dilation=self.enc_dilation_rates[i], groups=1, bias=True, padding_mode='zeros'))
                 enc_modules.append(LN_v2(self.time_range))
-                enc_modules.append(nn.ELU())
+                enc_modules.append(self.activation)
             elif i == self.enc_layers - 1:
                 enc_modules.append(nn.Conv1d(intermediate_channels, self.embedding_channels, kernel_size=self.enc_kernel_sizes[i], stride=1, padding='same', dilation=self.enc_dilation_rates[i], groups=1, bias=True, padding_mode='zeros'))
             else:
                 enc_modules.append(nn.Conv1d(intermediate_channels, intermediate_channels, kernel_size=self.enc_kernel_sizes[i], stride=1, padding='same', dilation=self.enc_dilation_rates[i], groups=1, bias=True, padding_mode='zeros'))
                 enc_modules.append(LN_v2(self.time_range))
-                enc_modules.append(nn.ELU())
+                enc_modules.append(self.activation)
                 
         for i in range(self.dec_layers):
             if i == 0:
                 dec_modules.append(nn.Conv1d(self.embedding_channels, intermediate_channels, kernel_size=self.dec_kernel_sizes[i], stride=1, padding='same', dilation=self.dec_dilation_rates[i], groups=1, bias=True, padding_mode='zeros'))
                 dec_modules.append(LN_v2(self.time_range))
-                dec_modules.append(nn.ELU())
+                dec_modules.append(self.activation)
             elif i == self.enc_layers - 1:
                 dec_modules.append(nn.Conv1d(intermediate_channels, self.input_channels, kernel_size=self.dec_kernel_sizes[i], stride=1, padding='same', dilation=self.dec_dilation_rates[i], groups=1, bias=True, padding_mode='zeros'))
             else:
                 dec_modules.append(nn.Conv1d(intermediate_channels, intermediate_channels, kernel_size=self.dec_kernel_sizes[i], stride=1, padding='same', dilation=self.dec_dilation_rates[i], groups=1, bias=True, padding_mode='zeros'))
                 dec_modules.append(LN_v2(self.time_range))
-                dec_modules.append(nn.ELU())
+                dec_modules.append(self.activation)
         
         self.encoder = nn.Sequential(*enc_modules)
         self.decoder = nn.Sequential(*dec_modules)
@@ -402,7 +403,7 @@ class PAEInputFlattened(nn.Module):
 
         return y, latent, signal, params
     
-    
+
 
 if __name__ == "__main__":
     from src.utils.helpers import DotDict

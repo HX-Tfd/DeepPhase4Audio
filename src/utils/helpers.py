@@ -87,7 +87,7 @@ def resolve_model_class(name, cfg):
         'pae': PAE(cfg),
         'pae_flat': PAEInputFlattened(cfg),
         # 'ae': AE(cfg), 
-        # 'vq_pae': VQ_AE(cfg)
+        'vq_pae': VQ_AE(cfg)
     }[name]
 
 
