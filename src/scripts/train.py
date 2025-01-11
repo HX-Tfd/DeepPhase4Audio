@@ -46,7 +46,7 @@ def main():
         dirpath=os.path.join(cfg.metadata.log_dir, 'checkpoints'),
         save_last=False,
         save_top_k=1,
-        monitor='metrics/MAE_val',
+        monitor='loss_val/total_loss',
         mode='min',
     )
 

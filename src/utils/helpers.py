@@ -84,11 +84,11 @@ def resolve_dataset_class(name):
 
 def resolve_model_class(name, cfg):
     return {
-        'pae': PAE(cfg),
-        'pae_flat': PAEInputFlattened(cfg),
-        # 'ae': AE(cfg), 
-        'vq_pae': VQ_AE(cfg)
-    }[name]
+        'pae': PAE,
+        'pae_flat': PAEInputFlattened,
+        'ae': AE, 
+        'vq_pae': VQ_AE
+    }[name](cfg)
 
 
 def resolve_optimizer(cfg, params):

@@ -29,4 +29,4 @@ export WANDB_CONFIG_DIR=${TMPDIR}
 
 # Run training
 echo "Start training"
-python -m src.scripts.train --config_file "configs/baseline.yaml"
+python -m src.scripts.train --config_file "configs/vq_pae/dac_snake.yaml"

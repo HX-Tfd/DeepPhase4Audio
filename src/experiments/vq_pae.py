@@ -10,12 +10,14 @@ import torch.nn as nn
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
 from torch.utils.data import DataLoader
+from audiotools import AudioSignal
 import wandb
 
 from src.datasets.definitions import SPLIT_TRAIN, SPLIT_TEST, SPLIT_VALID
 from src.utils.metrics import MAE
 from src.utils.helpers import resolve_dataset_class, resolve_lr_scheduler, resolve_model_class, resolve_optimizer
 from src.losses.stft_loss import STFTLoss, MultiResolutionSTFTLoss
+from src.losses.loss import L1Loss, SISDRLoss, MelSpectrogramLoss
 
 class VQ_PAEModel(pl.LightningModule):
 
@@ -39,13 +41,20 @@ class VQ_PAEModel(pl.LightningModule):
         for split in (SPLIT_TRAIN, SPLIT_VALID, SPLIT_TEST):
             print(f'Number of samples in {split} split: {len(self.datasets[split])}')
 
-
+        # TODO: include new losses after the dropout model has been trained, also add snake activation
         self._instantiate_model()
+        self.feat_loss = L1Loss()
+        self.mel_loss = MelSpectrogramLoss()
+        self.sisdr_loss = SISDRLoss()
         self.recon_loss = nn.MSELoss()
         self.stft_loss = STFTLoss()
         self.metric = MAE
         
         self.loss_weights = self.loss_config.loss_weights.to_dict()
+        
+    @staticmethod
+    def _to_audio_signal(x: torch.Tensor, sample_rate=32000):
+        return AudioSignal(x, sample_rate=sample_rate)
 
 
     def training_step(self, batch, batch_idx):
@@ -64,12 +73,16 @@ class VQ_PAEModel(pl.LightningModule):
         vq_cb_loss = pred["vq/codebook_loss"]
         
         # add loss items
-        loss_items["mse_loss"] = self.recon_loss(batch, x_recon)
+        loss_items["recon_loss"] = self.recon_loss(batch, x_recon)
         stft_loss = self.stft_loss(batch, x_recon)
         loss_items["stft_loss_spectral_convergence"], loss_items["stft_loss_magnitude"] = \
             stft_loss[0], stft_loss[1]
         loss_items["vq/vodebook_loss"] = vq_cb_loss
         loss_items["vq/commitment_loss"] = vq_comm_loss
+        loss_items["feature_matching_loss"] = self.feat_loss(self._to_audio_signal(batch), 
+                                                             self._to_audio_signal(x_recon))
+        loss_items["mel_spectrogram_loss"] = self.mel_loss(self._to_audio_signal(batch), 
+                                                           self._to_audio_signal(x_recon))
         loss_items["total_loss"] = sum([v * loss_items[k] for k, v in self.loss_weights.items() if k in loss_items])
         self.log_dict(
             {f"loss_train/{k}": v for k, v in loss_items.items()}, 
@@ -96,12 +109,16 @@ class VQ_PAEModel(pl.LightningModule):
         vq_cb_loss = pred["vq/codebook_loss"]
         
         # add loss items
-        loss_items["mse_loss"] = self.recon_loss(batch, x_recon)
+        loss_items["recon_loss"] = self.recon_loss(batch, x_recon)
         stft_loss = self.stft_loss(batch, x_recon)
         loss_items["stft_loss_spectral_convergence"], loss_items["stft_loss_magnitude"] = \
             stft_loss[0], stft_loss[1]
         loss_items["vq/vodebook_loss"] = vq_cb_loss
         loss_items["vq/commitment_loss"] = vq_comm_loss
+        loss_items["feature_matching_loss"] = self.feat_loss(self._to_audio_signal(batch), 
+                                                             self._to_audio_signal(x_recon))
+        loss_items["mel_spectrogram_loss"] = self.mel_loss(self._to_audio_signal(batch), 
+                                                           self._to_audio_signal(x_recon))
         loss_items["total_loss"] = sum([v * loss_items[k] for k, v in self.loss_weights.items() if k in loss_items])
         self.log_dict(
             {f"loss_val/{k}": v for k, v in loss_items.items()}, 

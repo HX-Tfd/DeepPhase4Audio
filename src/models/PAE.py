@@ -12,7 +12,7 @@ import torch.nn.functional as F
 
 from src.utils.model_utils import count_model_params
 
-from .modules import LN_v2, Snake, positional_encoding
+from .modules import LN_v2, Snake1d, positional_encoding
 
 class PAE(nn.Module):
     """
@@ -286,7 +286,7 @@ class PAEInputFlattened(nn.Module):
         self.time_range = cfg.time_range
         self.window = cfg.window
         self.use_fft_mlp = cfg.use_fft_mlp
-        self.activation = Snake() # nn.ELU()
+        self.activation = Snake1d() # nn.ELU()
 
         self.tpi = Parameter(torch.from_numpy(np.array([2.0*np.pi], dtype=np.float32)), requires_grad=False)
         self.args = Parameter(torch.from_numpy(np.linspace(-self.window/2, self.window/2, self.time_range, dtype=np.float32)), requires_grad=False)

@@ -20,6 +20,14 @@ class LN_v2(nn.Module):
         return y
     
 
+def activation(name: str, **kwargs) -> nn.Module:
+    return {
+        'elu': nn.ELU,
+        'leaky_relu': nn.LeakyReLU,
+        'snake': Snake
+    }[name](**kwargs)
+
+
 def positional_encoding(pos: torch.Tensor, d_model=1):  # pos is a tensor of shape (B, L)
     """
     Adds 1D sinusoidal positional encoding to the input positions.
@@ -43,6 +51,14 @@ def positional_encoding(pos: torch.Tensor, d_model=1):  # pos is a tensor of sha
 
     return pe.unsqueeze(0).expand(B, -1, -1).squeeze()  # (B, L, d_model)
 
+    
+def WNConv1d(*args, **kwargs):
+    return weight_norm(nn.Conv1d(*args, **kwargs))
+
+
+def WNConvTranspose1d(*args, **kwargs):
+    return weight_norm(nn.ConvTranspose1d(*args, **kwargs))
+
 
 class Snake(nn.Module):
     def __init__(self, alpha=0.5):
@@ -52,14 +68,6 @@ class Snake(nn.Module):
     def forward(self, x):
         return x + (1 / self.alpha) * torch.sin(self.alpha * x) ** 2
     
-    
-def WNConv1d(*args, **kwargs):
-    return weight_norm(nn.Conv1d(*args, **kwargs))
-
-
-def WNConvTranspose1d(*args, **kwargs):
-    return weight_norm(nn.ConvTranspose1d(*args, **kwargs))
-
 
 @torch.jit.script
 def snake(x, alpha):

@@ -1,0 +1,60 @@
+metadata:
+  run_name: 'VQ_VAE_DAC_large_snake'
+  log_dir: 'logs'
+  logging: No
+
+dataset_config:
+  dataset: 'audio_dataset'
+  dataset_root: 'data'
+  resume: null
+
+training_config:
+  grid_search: No
+  num_epochs: 100
+  batch_size: 16
+  batch_size_validation: 16
+  optimizer: 'adam'
+  optimizer_lr: 0.001
+  optimizer_momentum: 0.9
+  optimizer_weight_decay: 0.001
+  optimizer_float_16: False
+  lr_scheduler: 'poly'
+  lr_scheduler_power: 0.9
+  ckpt_save_dir: 'logs/checkpoints'
+  resume: null
+
+loss_config:
+  loss_weights:
+    mse_loss: 1.0
+    l1_loss: 2.0 # feature matching loss
+    sisdr_loss: 0.0
+    stft_loss_spectral_convergence: 1.0
+    stft_loss_magnitude: 1.0
+    mel_spectrogramm_loss: 15.0
+    vq/commitment_loss: 1.0
+    vq/codebook_loss: 0.25
+
+model_config:
+  experiment_name: 'VQ_PAEModel'
+  model_name: 'vq_pae'
+  input_channels: 1
+  intermediate_channels: 64 # 16
+  embedding_channels: 128
+  time_range: 32000 # sample rate
+  window: 2.0
+  use_fft_mlp: False
+  enc_dilation_rates: [9, 3, 1]
+  enc_kernel_sizes: [7, 3, 3]
+  dec_dilation_rates: [1, 3, 9]
+  dec_kernel_sizes: [3, 3, 7]
+  vq:
+    input_dim: 128
+    n_codebooks: 9
+    codebook_size: 128
+    codebook_dim: 8
+    quantizer_dropout: 0.5
+  activation: 'snake'
+
+worker_config:
+  workers: 0
+  workers_validation: 0

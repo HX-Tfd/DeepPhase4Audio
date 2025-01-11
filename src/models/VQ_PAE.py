@@ -14,7 +14,7 @@ import torch.nn.functional as F
 
   
 from .PAE import PAE
-from .modules import LN_v2, Snake1d, WNConv1d, WNConvTranspose1d
+from .modules import LN_v2, Snake1d, WNConv1d, WNConvTranspose1d, activation
 from .vq import ResidualVectorQuantize
 
 def init_weights(m):
@@ -157,7 +157,6 @@ class VQ_AE(PAE):
         self.embedding_channels = cfg.embedding_channels
         self.time_range = cfg.time_range
         self.window = cfg.window
-        self.activation = nn.ELU()
         self.use_fft_mlp = cfg.use_fft_mlp
         
         # VQ configs
@@ -167,9 +166,9 @@ class VQ_AE(PAE):
         self.tpi = Parameter(torch.from_numpy(np.array([2.0*np.pi], dtype=np.float32)), requires_grad=False)
         self.args = Parameter(torch.from_numpy(np.linspace(-self.window/2, self.window/2, self.time_range, dtype=np.float32)), requires_grad=False)
         self.freqs = Parameter(torch.fft.rfftfreq(self.time_range)[1:] * self.time_range / self.window, requires_grad=False) #Remove DC frequency
-
         intermediate_channels = cfg.intermediate_channels # int(self.input_channels/3)
-        
+        self.activation = activation(cfg.activation)
+            
         self.enc_dilation_rates = cfg.enc_dilation_rates
         self.dec_dilation_rates = cfg.dec_dilation_rates
         self.enc_kernel_sizes = cfg.enc_kernel_sizes
@@ -218,6 +217,22 @@ class VQ_AE(PAE):
                 nn.ELU()
             )
         
+    def FFT(self, function, dim):
+        rfft = torch.fft.rfft(function, dim=dim)
+        magnitudes = rfft.abs()
+        spectrum = magnitudes[:,:,1:] # Spectrum without DC component
+        power = spectrum**2
+
+        # Frequency
+        freq = torch.sum(self.freqs * power, dim=dim) / torch.sum(power, dim=dim)
+
+        # Amplitude
+        amp = 2 * torch.sqrt(torch.sum(power, dim=dim)) / self.time_range
+
+        # Offset
+        offset = rfft.real[:,:,0] / self.time_range # DC component
+
+        return freq, amp, offset
         
     def encode(self, x):
         # Signal Embedding
@@ -234,6 +249,22 @@ class VQ_AE(PAE):
         z = self.encode(x)
         z_pae = z 
         
+        # disentangle phase 
+        f, a, b = self.FFT(y, dim=2) # Frequency, Amplitude, Offset
+
+        p = torch.empty((y.shape[0], self.embedding_channels), dtype=torch.float32, device=y.device)
+        for i in range(self.embedding_channels):
+            v = self.fc[i](y[:,i,:])
+            p[:,i] = torch.atan2(v[:,1], v[:,0]) / self.tpi
+
+        p = p.unsqueeze(2)
+        f = f.unsqueeze(2)
+        a = a.unsqueeze(2)
+        b = b.unsqueeze(2)
+        
+        phase_params = [p, f, a, b] # Save latent space parameters for returning
+        z_recon = a * torch.sin(self.tpi * (f * self.args + p)) + b
+
         # rvq
         z_vq, codes, latents, commitment_loss, codebook_loss = self.quantizer(z, n_quantizers) 
         
@@ -241,8 +272,10 @@ class VQ_AE(PAE):
         x = self.decode(z_vq)
         return {
             "audio": x[..., :self.time_range],
-            "z_pae": z_pae,
+            "z_pae": z_pae, 
             "z_vq": z_vq,
+            "z_recon": z_recon,
+            "phase_params": phase_params,
             "codes": codes,
             "latents": latents,
             "vq/commitment_loss": commitment_loss,
@@ -287,12 +320,14 @@ if __name__ == "__main__":
     audio = d["audio"] # B, L
     z_pae = d["z_pae"] # B, emb_ch, L
     z_vq = d["z_vq"]   # B, emb_ch, L
+    z_recon = d["z_recon"]
+    phase_params = d["phase_params"]
     codes = d["codes"] # B, n_codebooks, L
     latents = d["latents"] # B, n_codebooks x codebook_dim, L
     vq_comm_loss = d[ "vq/commitment_loss"]
     vq_cb_loss = d["vq/codebook_loss"]
     
     print(audio.shape, z_pae.shape, z_vq.shape, codes.shape, latents.shape)
-    
+    print(z_recon.shape, phase_params.shape)
 
 
