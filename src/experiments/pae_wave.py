@@ -10,6 +10,7 @@ import soundfile as sf
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
 from torch.utils.data import DataLoader
@@ -48,6 +49,8 @@ class PAEWaveModel(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         if torch.cuda.is_available():
             batch.to(self.device)
+        if self.training:
+            batch = batch.requires_grad_()
         pred, _, _, param = self.model(batch) # output is (y, latent, signal, param)
         
         if self.D == 1:
@@ -60,13 +63,15 @@ class PAEWaveModel(pl.LightningModule):
         stft_loss = self.stft_loss(batch, pred)
         stft_sc, stft_mag = stft_loss[0], stft_loss[1]
         amp_reg = self.loss(param[2],torch.zeros_like(param[2]))
-        loss_total = loss + stft_sc + stft_mag #+ self.lambda_1*amp_reg
+        # period_loss = self.periodicity_loss(pred) * 0.1  # Weight factor
+        loss_total = loss + stft_sc + stft_mag # + period_loss #+ self.lambda_1*amp_reg
 
         self.log_dict(
             {
                 'loss_train/mse_loss': loss,
                 'loss_train/stft_loss_spectral_convergence': stft_sc,
                 'loss_train/stft_loss_magnitude': stft_mag,
+                #'loss_train/period_loss': period_loss,
                 'loss_train/total_loss': loss_total,
             }, on_step=True, on_epoch=False, prog_bar=True
         )
@@ -144,8 +149,8 @@ class PAEWaveModel(pl.LightningModule):
         metrics_mae = self.metric(batch, pred.reshape(pred.shape[0], self.D, self.N))
         
         for i in range(self.cfg.batch_size):
-            act = batch[i,0].numpy()
-            pre = pred[i].numpy()
+            act = batch[i,0].cpu().numpy()
+            pre = pred[i].cpu().numpy()
             sf.write(f'actual_2signals_{i}.wav',act,16000)
             sf.write(f'pred_2signals_{i}.wav', pre,16000)
 
@@ -170,6 +175,22 @@ class PAEWaveModel(pl.LightningModule):
 
     def test_dataloader(self):
         return self._create_val_test_dataloader(SPLIT_TEST)
+    
+    def periodicity_loss(self, signal):
+        """Encourage periodic behavior in latent signals"""
+        # Compute autocorrelation
+        signal_fft = torch.fft.rfft(signal, dim=-1)
+        power = torch.abs(signal_fft) ** 2
+        corr = torch.fft.irfft(power, dim=-1)
+    
+        # Normalize
+        corr = corr / (corr[..., 0:1] + 1e-6)
+    
+        # Target correlation for periodic signals
+        t = torch.linspace(0, np.pi, corr.size(-1), device=signal.device)
+        target = torch.cos(t)
+    
+        return F.mse_loss(corr, target)
     
 
     def configure_optimizers(self):

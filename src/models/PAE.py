@@ -10,6 +10,8 @@ from torch.nn.parameter import Parameter
 import torch.nn as nn
 import torch.nn.functional as F
 from src.models.wavenet_modules import *
+import matplotlib.pyplot as plt
+import os
 
 class LN_v2(nn.Module):
     def __init__(self, dim, epsilon=1e-5):
@@ -286,7 +288,6 @@ class PAEWave(nn.Module):
         self.args = Parameter(torch.from_numpy(np.linspace(-self.window/2, self.window/2, self.time_range, dtype=np.float32)), requires_grad=False)
         self.freqs = Parameter(torch.fft.rfftfreq(self.time_range)[1:] * self.time_range / self.window, requires_grad=False)
         
-        # Build dilated convolution stack
         # WaveNet encoder parameters
         self.residual_channels = cfg.residual_channels
         self.dilation_channels = cfg.dilation_channels
@@ -296,16 +297,10 @@ class PAEWave(nn.Module):
         self.dilation_channels = cfg.dilation_channels
         self.residual_channels = cfg.residual_channels
         self.skip_channels = cfg.skip_channels
-        self.classes = self.input_channels
+        self.classes = cfg.classes
         self.kernel_size = cfg.kernel_size
         self.intermediate_channels = cfg.intermediate_channels
         #self.dtype = dtype #this was in the original code
-
-        # build model
-        # TODO: maybe add normalization
-
-        # Initial convolution to residual_channels
-        self.start_conv = nn.Conv1d(in_channels=self.input_channels, out_channels=self.residual_channels, kernel_size=1, padding='same')
 
         # WaveNet Encoder Stack
         self.dilated_convs = nn.ModuleList()
@@ -316,12 +311,22 @@ class PAEWave(nn.Module):
 
         receptive_field = 1
         init_dilation = 1
+        dilation_power = 1
 
         self.dilations = []
         self.dilated_queues = []
 
+        # WaveNet Dencoder Stack
+        self.decoder_dilated = nn.ModuleList()
+        self.decoder_residual = nn.ModuleList()
+        self.decoder_skip = nn.ModuleList()
+
+        # ☆☆ Should we add mu law encoding to turn input into one hot vectors of size 256 ? Tried - but makes the latent space representation inconsistent with the periodic representation
+
         # 1x1 convolution to create channels
         self.start_conv = nn.Conv1d(in_channels=self.input_channels, out_channels=self.residual_channels,kernel_size=1) 
+
+        # TODO: maybe add normalization
 
         for b in range(self.blocks):
             additional_scope = self.kernel_size - 1
@@ -329,10 +334,6 @@ class PAEWave(nn.Module):
             for i in range(self.layers):
                 # dilations of this layer
                 self.dilations.append((new_dilation, init_dilation))
-
-                # dilated queues for fast generation
-                self.dilated_queues.append(DilatedQueue(max_length=(self.kernel_size - 1) * new_dilation + 1,
-                                                        num_channels=self.residual_channels, dilation=new_dilation ))
 
                 # dilated convolutions
                 self.filter_convs.append(nn.Conv1d(in_channels=self.residual_channels,out_channels=self.dilation_channels,
@@ -351,12 +352,20 @@ class PAEWave(nn.Module):
                 additional_scope *= 2
                 init_dilation = new_dilation
                 new_dilation *= 2
+                dilation_power += 1
 
         # not sure if we need 2 end_conv layers
         self.end_conv_1 = nn.Conv1d(in_channels=self.skip_channels, out_channels=self.intermediate_channels, kernel_size=1, bias=True)
 
         self.end_conv_2 = nn.Conv1d(in_channels=self.intermediate_channels, out_channels=self.embedding_channels, kernel_size=1, bias=True)
-
+        print(f"dilations for encoding: {new_dilation}")
+        # ☆☆ then project wavenet to the embedding space in which we want to find the phase manifolds of size self.embedding_channels -- not sure, that might b redundant
+        """
+        self.to_embedding = nn.Sequential(
+            nn.Conv1d(self.classes, self.intermediate_channels, 1),
+            nn.ReLU(),
+            nn.Conv1d(self.intermediate_channels, self.embedding_channels, 1)
+        )"""
         self.receptive_field = receptive_field
         
         # PAE components
@@ -364,8 +373,73 @@ class PAEWave(nn.Module):
         for _ in range(self.embedding_channels):
             self.fc.append(nn.Linear(self.time_range, 2))
 
+        # ☆☆  if we did ewxtra projection - project back
+        """
+        self.from_embedding = nn.Sequential(
+            nn.Conv1d(self.embedding_channels, self.intermediate_channels, 1),
+            nn.ReLU(),
+            nn.Conv1d(self.intermediate_channels, self.classes, 1)
+        )"""
 
+        """
+        DECODER - TRY 3
+        """
+        
+        # Initialize improved decoder components - idk shouldnt it echo how many it does the other way around ?
+        dilations = [2**i for i in range(self.layers+1)][::-1]  # Reversed dilations tensor
+        print(f"dilations tensor for decoder : {dilations}")
+    
+        # Decoder initial projection
+        self.decoder_initial = nn.ConvTranspose1d(self.embedding_channels, self.residual_channels, 1)
 
+        # Dilated convolution layers
+        self.decoder_dilated = nn.ModuleList([
+            nn.ConvTranspose1d(
+                self.residual_channels,
+                self.dilation_channels * 2,
+                kernel_size=3,
+                padding=dilation if isinstance(dilation, int) else dilation[0],
+                dilation=dilation if isinstance(dilation, int) else dilation[0]
+
+            ) for dilation in self.dilations
+        ])
+        
+        # Residual connections
+        self.decoder_residual = nn.ModuleList([
+            nn.ConvTranspose1d(
+                self.dilation_channels,
+                self.residual_channels,
+                kernel_size=1
+            ) for _ in self.dilations
+        ])
+        
+        # Skip connections
+        self.decoder_skip = nn.ModuleList([
+            nn.ConvTranspose1d(
+                self.dilation_channels,
+                self.skip_channels,
+                kernel_size=1
+            ) for _ in self.dilations
+        ])
+        
+        # Final layers with transposed convolutions
+        self.decoder_final = nn.Sequential(
+            nn.ReLU(),
+            nn.ConvTranspose1d(
+                self.skip_channels,
+                self.intermediate_channels,
+                kernel_size=1
+            ),
+            nn.ReLU(),
+            nn.ConvTranspose1d(
+                self.intermediate_channels,
+                self.input_channels,
+                kernel_size=1
+            )
+        )
+
+        """
+        DECODER - TRY 1
         # TODO: revisit and redefine the entire Decoder Architecture
         self.end_deconv = nn.Conv1d(in_channels=self.residual_channels, out_channels=self.input_channels,kernel_size=1)
 
@@ -410,12 +484,50 @@ class PAEWave(nn.Module):
         self.start_deconv_1 = nn.ConvTranspose1d(in_channels=self.embedding_channels,out_channels=self.intermediate_channels,kernel_size=1,bias=True)
         
         self.start_deconv_2 = nn.ConvTranspose1d(in_channels=self.intermediate_channels,out_channels=self.skip_channels, kernel_size=1,bias=True)
-        
-    
+        """
+
+        """
+        DECODER - TRY 2 
+        dilations = [2**i for i in range(9)][::-1] # Reversed dilations tensor
+        print(f"dilations tensor for decoder : {dilations}")
+        # Decoder initial projection
+        self.decoder_initial = nn.Conv1d(self.embedding_channels, self.residual_channels, 1)
+        for dilation in dilations:
+        self.decoder_dilated.append(
+            nn.Conv1d(
+            self.residual_channels,
+            self.dilation_channels * 2,
+            kernel_size=3,
+            padding=dilation,
+            dilation=dilation
+            )
+        )
+        self.decoder_residual.append(
+            nn.Conv1d(
+            self.dilation_channels,
+            self.residual_channels,
+            1
+            )
+        )
+        self.decoder_skip.append(
+            nn.Conv1d(
+            self.dilation_channels,
+            self.skip_channels,
+            1
+            )
+        )
+        # Decoder final layers
+        self.decoder_final = nn.Sequential(
+            nn.ReLU(),
+            nn.Conv1d(self.skip_channels, self.intermediate_channels, 1),
+            nn.ReLU(),
+            nn.Conv1d(self.intermediate_channels, self.input_channels, 1),
+            )
+        """
 
     def wavenet(self,x, dilation_func):
         x = self.start_conv(x)
-        skip = 0
+        skip = None
 
         # WaveNet layers
         for i in range(self.blocks * self.layers):
@@ -434,16 +546,18 @@ class PAEWave(nn.Module):
             # parametrized skip connection
             s = x
             if x.size(2) != 1:
-                 s = dilate(x, 1, init_dilation=dilation)
+                s = dilate(x, 1, init_dilation=dilation)
             s = self.skip_convs[i](s)
-            try:
-                skip = skip[:, :, -s.size(2):]
-            except:
-                skip = 0
+            if skip is None:
+                skip = s
+            else:
+                skip = skip[:, :, -s.size(2):]  # Trim skip to match s
+                s = s[:, :, -skip.size(2):]     # Trim s to match skip
             skip = s + skip
 
             x = self.residual_convs[i](x)
             x = x + residual
+            # x = x + residual[:, :, (self.kernel_size - 1):] -- original shape
 
         x = F.relu(skip)
         x = F.relu(self.end_conv_1(x))
@@ -455,18 +569,15 @@ class PAEWave(nn.Module):
         x = dilate(input, dilation, init_dilation)
         return x
     
+    """
+    NOT USED
     def wavenet_inverse_dilate(self,input,dilation,init_dilation,i):
         #x = invert_dilate(input,dilation,init_dilation)
         return input
+    """
 
-    def queue_dilate(self, input, dilation, init_dilation, i):
-        queue = self.dilated_queues[i]
-        queue.enqueue(input.data[0])
-        x = queue.dequeue(num_deq=self.kernel_size, dilation=dilation)
-        x = x.unsqueeze(0)
-
-        return x
-
+    """
+    NOT USED
     def de_wavenet(self, x, dilation_func):
         x = self.start_deconv_1(x)
         x = F.relu(x)
@@ -505,6 +616,51 @@ class PAEWave(nn.Module):
         x = self.end_deconv(x)
         print(x.shape)
         return x
+    """
+
+    
+
+    def decode(self, x):
+        x = self.decoder_initial(x)
+        
+        # Storage for skip connections
+        skip_connections = []
+        
+        # Process through dilated layers in reverse order
+        for i, (dilated, residual, skip) in enumerate(zip(
+            self.decoder_dilated,
+            self.decoder_residual,
+            self.decoder_skip
+        )):
+            # Store residual
+            residual_x = x
+            
+            # Dilated convolution
+            x = dilated(x)
+            
+            # Gating mechanism
+            tanh_out, sigmoid_out = torch.chunk(x, 2, dim=1)
+            x = torch.tanh(tanh_out) * torch.sigmoid(sigmoid_out)
+            
+            # Split for residual and skip connections
+            # For skip connection
+            s = skip(x)
+            skip_connections.append(s)
+            
+            # For residual connection
+            x = residual(x)
+            
+            # Add residual
+            x = (x + residual_x) * 0.707  # Scale by 1/√2 for stability
+        
+        # Combine skip connections
+        x = torch.stack(skip_connections).sum(dim=0)
+        
+        # Final layers
+        x = self.decoder_final(x)
+
+        return x
+
 
     def FFT(self, function, dim):
         rfft = torch.fft.rfft(function, dim=dim)
@@ -529,37 +685,48 @@ class PAEWave(nn.Module):
 
     
     def forward(self, x):
-        # Reshape input
-        print(type(x),x)
+        # Input shape: [B, input_channels, T]
         y = x.reshape(x.shape[0], self.input_channels, self.time_range)
 
+        print(f"y before encoding : {y.shape}")
+    
+        # μ-law encoding necessary ?
+    
         # WaveNet encoder
-        y = self.wavenet(x, dilation_func=self.wavenet_dilate)
+        y = self.wavenet(y, dilation_func=self.wavenet_dilate)
         latent = y
+    
         # Extract frequency components
         f, a, b = self.FFT(y, dim=2)
-
+    
         # Phase calculation
         p = torch.empty((y.shape[0], self.embedding_channels), dtype=torch.float32, device=y.device)
         for i in range(self.embedding_channels):
             v = self.fc[i](y[:,i,:])
             p[:,i] = torch.atan2(v[:,1], v[:,0]) / self.tpi
+    
         # Parameters
         p = p.unsqueeze(2)
         f = f.unsqueeze(2)
         a = a.unsqueeze(2)
         b = b.unsqueeze(2)
-
         params = [p, f, a, b]
+    
         # Latent Reconstruction
         y = a * torch.sin(self.tpi * (f * self.args + p)) + b
         signal = y
     
-        # Signal Reconstruction using inverse WaveNet
-        y = self.de_wavenet(y,dilation_func=self.wavenet_inverse_dilate)
+        # Decode through inverse WaveNet
+        y = self.decode(y)  # [B, classes, T]
+    
+        # μ-law decode back to waveform ?
+    
+        # Final reshape
         y = y.reshape(y.shape[0], self.input_channels*self.time_range)
-       
+    
         return y, latent, signal, params
+
+
 
 class PAEDeep(nn.Module):
     """

@@ -1,17 +1,17 @@
 metadata:
-  run_name: 'PAEWave_dryrun'
+  run_name: 'PAEWave_earlystopping'
   log_dir: 'logs'
-  logging: False
+  logging: True
 
 dataset_config:
   dataset: 'audio_dataset'
-  dataset_root: 'data/test'
+  dataset_root: 'data'
   resume: null
 
 training_config:
-  num_epochs: 10
-  batch_size: 10
-  batch_size_validation: 10
+  num_epochs: 50
+  batch_size: 4
+  batch_size_validation: 4
   optimizer: 'adam'
   optimizer_lr: 0.01
   optimizer_momentum: 0.9
@@ -25,17 +25,18 @@ model_config:
   experiment_name: 'PAEWaveModel'
   model_name: 'pae_wave'
   input_channels: 1
-  intermediate_channels: 24 
-  embedding_channels: 32 
-  kernel_size: 51
+  intermediate_channels: 128
+  embedding_channels: 32
+  kernel_size: 2
   time_range: 32000
   window: 2.0
-  dilation: 1
-  residual_channels: 16 # NEW for wavenet
-  dilation_channels: 24  # NEW for wavenet
-  skip_channels: 1  # NEW for wavenet
-  layers: 4 # NEW for wavenet 
+  dilation: 2 # Not actually used in wavenet
+  residual_channels: 32 # NEW for wavenet
+  dilation_channels: 64  # NEW for wavenet
+  skip_channels: 128  # NEW for wavenet
+  layers: 8 # NEW for wavenet 
   blocks: 2   # NEW for wavenet
+  classes: 256 # NEW for wavenet
 
 worker_config:
   workers: 7

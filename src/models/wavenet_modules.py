@@ -61,6 +61,57 @@ def invert_dilate(x, orig_n, init_dilation=1):
 
     return x
 
+def mu_law_encode(x):
+    """Convert audio to one-hot mu-law encoded vectors"""
+    mu = 255  # μ-law compression (256 levels)
+    
+    # Ensure input is in [-1, 1]
+    x = torch.clamp(x, -1, 1)
+    
+    # μ-law compression
+    x_mu = torch.sign(x) * torch.log1p(mu * torch.abs(x)) / torch.log1p(torch.tensor(mu, device=x.device, dtype=x.dtype))
+    
+    # Quantize to 256 levels
+    x_quant = ((x_mu + 1) / 2 * mu).long()
+    
+    # Create one-hot encoding
+    x_onehot = torch.nn.functional.one_hot(x_quant, num_classes=mu + 1).to(torch.float32)
+    
+    # Rearrange dimensions to [B, C, T]
+    x_onehot = x_onehot.permute(0, 2, 1)
+    
+    return x_onehot
+
+def mu_law_decode(x):
+    """
+    Decodes audio from μ-law encoded one-hot representation back to waveform.
+    """
+    mu = 255  # μ value for the encoding/decoding
+
+    # Ensure μ is a tensor compatible with the input device and dtype
+    mu_tensor = torch.tensor(mu, device=x.device, dtype=x.dtype)
+    
+    # Step 1: Convert one-hot representation to indices [0, 255]
+    x_indices = torch.argmax(x, dim=1)  # [B, T]
+
+    # Step 2: Map indices to range [-1, 1]
+    x_mu = 2 * x_indices.float() / mu_tensor - 1  # [B, T]
+
+    # Step 3: Apply μ-law expansion formula
+    x = torch.sign(x_mu) * (1 / mu_tensor) * ((1 + mu_tensor)**torch.abs(x_mu) - 1)
+
+    # Step 4: Add a channel dimension to match expected shape
+    x = x.unsqueeze(1)  # [B, 1, T]
+
+    return x
+
+def one_hot_encode(x, num_classes=256):
+    x = torch.clamp(x, min=-1.0, max=1.0)
+    x = (x + 1) / 2 * (num_classes - 1)  # Rescale to [0, 255]
+    x = x.long()  
+
+    return F.one_hot(x, num_classes=num_classes).float()
+
 
 class DilatedQueue:
     def __init__(self, max_length, data=None, dilation=1, num_deq=1, num_channels=1, dtype=torch.FloatTensor):

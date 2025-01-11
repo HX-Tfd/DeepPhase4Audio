@@ -82,13 +82,16 @@ def resolve_dataset_class(name):
 
 
 def resolve_model_class(name, cfg):
-    return {
-        #'pae_deep':PAEDeep,
-        'pae': PAE(cfg),
-        'pae_flat': PAEInputFlattened(cfg),
-        'ae': AE(cfg),
-        #'pae_wave': PAEWave(cfg),
-    }[name]
+    if name == 'pae':
+        return PAE(cfg)
+    elif name == 'pae_flat':
+        return PAEInputFlattened(cfg)
+    elif name == 'ae':
+        return AE(cfg)
+    elif name == 'pae_wave':
+        return PAEWave(cfg)
+    else:
+        raise ValueError(f"Unknown model name: {name}")
 
 
 def resolve_optimizer(cfg, params):
