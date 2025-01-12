@@ -16,6 +16,7 @@ import torch.nn.functional as F
 from .PAE import PAE
 from .modules import LN_v2, Snake1d, WNConv1d, WNConvTranspose1d, activation
 from .vq import ResidualVectorQuantize
+from .latent_combinator import CACombiner, MLPCombiner
 
 def init_weights(m):
     if isinstance(m, nn.Conv1d):
@@ -158,6 +159,7 @@ class VQ_AE(PAE):
         self.time_range = cfg.time_range
         self.window = cfg.window
         self.use_fft_mlp = cfg.use_fft_mlp
+        self.vq_only = cfg.vq_only
         
         # VQ configs
         self.quantizer = ResidualVectorQuantize(**cfg.vq.to_dict())
@@ -216,6 +218,13 @@ class VQ_AE(PAE):
                 nn.Linear(in_length, 1),
                 nn.ELU()
             )
+
+        if not self.vq_only:
+            self.latent_combinator = CACombiner(in_ch=self.embedding_channels,
+                                                key_ch=self.embedding_channels,
+                                                value_ch=self.embedding_channels,
+                                                n_heads=8
+                                                ) #MLPCombiner(channels=self.embedding_channels)
         
     def FFT(self, function, dim):
         rfft = torch.fft.rfft(function, dim=dim)
@@ -249,27 +258,34 @@ class VQ_AE(PAE):
         z = self.encode(x)
         z_pae = z 
         
-        # disentangle phase 
-        f, a, b = self.FFT(y, dim=2) # Frequency, Amplitude, Offset
-
-        p = torch.empty((y.shape[0], self.embedding_channels), dtype=torch.float32, device=y.device)
-        for i in range(self.embedding_channels):
-            v = self.fc[i](y[:,i,:])
-            p[:,i] = torch.atan2(v[:,1], v[:,0]) / self.tpi
-
-        p = p.unsqueeze(2)
-        f = f.unsqueeze(2)
-        a = a.unsqueeze(2)
-        b = b.unsqueeze(2)
-        
-        phase_params = [p, f, a, b] # Save latent space parameters for returning
-        z_recon = a * torch.sin(self.tpi * (f * self.args + p)) + b
-
         # rvq
         z_vq, codes, latents, commitment_loss, codebook_loss = self.quantizer(z, n_quantizers) 
+        z_comb = z_vq
+        
+        # disentangle phase 
+        z_recon, phase_params = None, None
+        if not self.vq_only:
+            f, a, b = self.FFT(z, dim=2) # Frequency, Amplitude, Offset
+
+            p = torch.empty((z.shape[0], self.embedding_channels), dtype=torch.float32, device=z.device)
+            for i in range(self.embedding_channels):
+                v = self.fc[i](z[:,i,:])
+                p[:,i] = torch.atan2(v[:,1], v[:,0]) / self.tpi
+
+            p = p.unsqueeze(2)
+            f = f.unsqueeze(2)
+            a = a.unsqueeze(2)
+            b = b.unsqueeze(2)
+            
+            phase_params = [p, f, a, b] # Save latent space parameters for returning
+            z_recon = a * torch.sin(self.tpi * (f * self.args + p)) + b
+
+            # combine discrete and continuous latent features
+            z_comb = self.latent_combinator(z_recon, z_vq)
         
         # Signal Reconstruction
-        x = self.decode(z_vq)
+        x = self.decode(z_comb)
+        
         return {
             "audio": x[..., :self.time_range],
             "z_pae": z_pae, 
@@ -296,6 +312,8 @@ if __name__ == "__main__":
         'enc_kernel_sizes': [7, 3, 3],
         'dec_dilation_rates': [1, 3, 9],
         'dec_kernel_sizes': [3, 3, 7],
+        'activation': 'snake',
+        'vq_only': False,
         'vq': {
             'input_dim': 16, # latent dim
             'n_codebooks': 9,
@@ -317,7 +335,7 @@ if __name__ == "__main__":
     
     x = torch.rand(16, 32000, 1)
     d = model(x)
-    audio = d["audio"] # B, L
+    x_recon = d["audio"] # B, L
     z_pae = d["z_pae"] # B, emb_ch, L
     z_vq = d["z_vq"]   # B, emb_ch, L
     z_recon = d["z_recon"]
@@ -327,7 +345,9 @@ if __name__ == "__main__":
     vq_comm_loss = d[ "vq/commitment_loss"]
     vq_cb_loss = d["vq/codebook_loss"]
     
-    print(audio.shape, z_pae.shape, z_vq.shape, codes.shape, latents.shape)
-    print(z_recon.shape, phase_params.shape)
+    p, f, a, b = phase_params
+    print(x_recon.shape, z_pae.shape, z_vq.shape, codes.shape, latents.shape)
+    print(z_recon.shape, p.shape, f.shape, a.shape, b.shape)
+    print(torch.cat((z_recon, z_vq), dim=1).shape)
 
 

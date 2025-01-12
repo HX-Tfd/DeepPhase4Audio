@@ -1,7 +1,7 @@
 metadata:
   run_name: 'VQ_VAE_DAC_large_snake'
   log_dir: 'logs'
-  logging: No
+  logging: Yes
 
 dataset_config:
   dataset: 'audio_dataset'
@@ -37,6 +37,7 @@ loss_config:
 model_config:
   experiment_name: 'VQ_PAEModel'
   model_name: 'vq_pae'
+  vq_only: Yes
   input_channels: 1
   intermediate_channels: 64 # 16
   embedding_channels: 16
@@ -53,7 +54,7 @@ model_config:
     codebook_size: 128
     codebook_dim: 8
     quantizer_dropout: 0.5
-  activation: 'snake'
+  activation: 'elu'
 
 worker_config:
   workers: 0

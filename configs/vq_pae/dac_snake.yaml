@@ -37,6 +37,7 @@ loss_config:
 model_config:
   experiment_name: 'VQ_PAEModel'
   model_name: 'vq_pae'
+  vq_only: Yes
   input_channels: 1
   intermediate_channels: 64 # 16
   embedding_channels: 128

@@ -21,6 +21,16 @@ export DATADIR='data'
 # SCRIPTDIR=$(realpath "$SCRIPTDIR")
 # cd $(dirname "$SCRIPTDIR")
 
+
+if [ $# -eq 0 ]; then
+  echo "Error: No configuration file provided."
+  echo "Usage: bash train.sh <path_to_config_file>"
+  exit 1
+fi
+
+CONFIG_FILE=$1
+echo "Using configuration file: $CONFIG_FILE"
+
 # setup weights and biases
 export WANDB_API_KEY=$(cat "wandb.key") # make sure you create this file and put your API key inside if you set --logging true
 export WANDB_DIR=${TMPDIR}
@@ -29,4 +39,4 @@ export WANDB_CONFIG_DIR=${TMPDIR}
 
 # Run training
 echo "Start training"
-python -m src.scripts.train --config_file "configs/vq_pae/dac_snake.yaml"
+python -m src.scripts.train --config_file "$CONFIG_FILE"

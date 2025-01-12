@@ -1,5 +1,5 @@
 metadata:
-  run_name: 'VQ_VAE_DAC_large_snake'
+  run_name: 'VQ_PAE_Simple_concat'
   log_dir: 'logs'
   logging: Yes
 
@@ -37,7 +37,7 @@ loss_config:
 model_config:
   experiment_name: 'VQ_PAEModel'
   model_name: 'vq_pae'
-  vq_only: Yes
+  vq_only: No
   input_channels: 1
   intermediate_channels: 64 # 16
   embedding_channels: 128
@@ -51,7 +51,7 @@ model_config:
   vq:
     input_dim: 128
     n_codebooks: 9
-    codebook_size: 128
+    codebook_size: 1024
     codebook_dim: 8
     quantizer_dropout: 0.5
   activation: 'elu'

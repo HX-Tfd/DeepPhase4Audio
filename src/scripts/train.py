@@ -77,7 +77,7 @@ def main():
     trainer = Trainer(
         logger=[wandb_logger, csv_logger] if cfg.metadata.logging else False,
         callbacks=[checkpoint_local_callback, rich_progress_bar],
-        accelerator=get_device_accelerator(preferred_accelerator='cpu'),
+        accelerator=get_device_accelerator(preferred_accelerator='cuda'),
         devices=1,
         default_root_dir=cfg.training_config.ckpt_save_dir, 
         max_epochs=cfg.training_config.num_epochs,

@@ -41,7 +41,6 @@ class VQ_PAEModel(pl.LightningModule):
         for split in (SPLIT_TRAIN, SPLIT_VALID, SPLIT_TEST):
             print(f'Number of samples in {split} split: {len(self.datasets[split])}')
 
-        # TODO: include new losses after the dropout model has been trained, also add snake activation
         self._instantiate_model()
         self.feat_loss = L1Loss()
         self.mel_loss = MelSpectrogramLoss()
@@ -51,6 +50,7 @@ class VQ_PAEModel(pl.LightningModule):
         self.metric = MAE
         
         self.loss_weights = self.loss_config.loss_weights.to_dict()
+        self.vq_only = self.model_config.vq_only
         
     @staticmethod
     def _to_audio_signal(x: torch.Tensor, sample_rate=32000):
@@ -60,7 +60,6 @@ class VQ_PAEModel(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         if torch.cuda.is_available():
             batch.to(self.device)
-
         pred = self.model(batch) 
         
         loss_items = {}
@@ -105,6 +104,8 @@ class VQ_PAEModel(pl.LightningModule):
         # z_vq = pred["z_vq"]   # B, emb_ch, L
         # codes = pred["codes"] # B, n_codebooks, L
         # latents = pred["latents"] # B, n_codebooks x codebook_dim, L
+        z_recon = pred["z_recon"]
+        phase_params = pred["phase_params"]
         vq_comm_loss = pred["vq/commitment_loss"]
         vq_cb_loss = pred["vq/codebook_loss"]
         
@@ -129,14 +130,21 @@ class VQ_PAEModel(pl.LightningModule):
         k = torch.randint(0, batch.shape[0], (1,)).item()
         x = batch[k, ...]
         y = x_recon[k, ...]
+        selected_latent_signal = z_recon[k, ...] if z_recon is not None else None
         
         title_prefix = 'images_val'
-        fig_reconstruction = self._visualize_reconstruction(x, y)
+        fig_reconstruction = self._visualize_reconstruction(x, y, selected_latent_signal)
         figure_log_spectogram = self._visualize_log_spectogram(x, y)
         self._log_figure(title=f"{title_prefix}/Reconstruction", caption="Input vs Reconstructed Signal", 
                          img=fig_reconstruction)
         self._log_figure(title=f"{title_prefix}/Log Spectogram", caption="Input and Output Log Spectograms", 
                          img=figure_log_spectogram)
+        
+        if not self.vq_only:
+            selected_params = [p[k, ...] for p in phase_params]
+            fig_latent_val = self._visualize_latent_values(selected_params)
+            self._log_figure(title=f"{title_prefix}/Latent Values", caption="Value Histogram of Learned Latent Parameters", 
+                            img=fig_latent_val)
     
 
     def train_dataloader(self):
@@ -197,12 +205,16 @@ class VQ_PAEModel(pl.LightningModule):
             })
         
         
-    def _visualize_reconstruction(self, x, y) -> PIL.Image:
+    def _visualize_reconstruction(self, x, y, signal=None) -> PIL.Image:
         """
-            Plot input signal x against output signal y
+            Plot input signal x against output signal y, plot latent signals
         """
         assert len(x.shape) == len(y.shape) == 1, "int/out have to be flattened 1D tensors"
-
+        
+        if signal is not None:
+            assert len(signal.shape) == 2, "latent signal has to be a 2D tensor"
+            signal = signal.detach().cpu().numpy()
+            
         x = x.detach().cpu().numpy()
         y = y.detach().cpu().numpy()
         
@@ -217,12 +229,70 @@ class VQ_PAEModel(pl.LightningModule):
         plt.title("Input vs Reconstructed Signal")
         plt.legend()
         plt.grid()
+
+        if signal is not None:
+            # Plot each of the k signals in a different color
+            plt.subplot(1, 2, 2)
+            for i in range(self.K):
+                plt.plot(range(100), signal[i, :100], label=f"Signal {i+1}")
+            plt.xlabel("Time/Index")
+            plt.ylabel("Amplitude")
+            plt.title(f"{self.K} Latent Signals")
+            plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
+            plt.legend()
         
         img = self._fig_to_PIL_img(fig)
         plt.close()
 
         return img
 
+
+    def _visualize_latent_values(self, params: tuple[torch.Tensor], n_bins: int = 100) -> PIL.Image:
+        params = [p.detach().cpu().numpy().flatten() for p in params]
+        p, f, a, b = params
+
+        # Create subplots for histograms
+        fig = plt.figure(figsize=(12, 8))
+
+        # Phase (p)
+        plt.subplot(2, 2, 1)
+        plt.hist(p, bins=n_bins, color="blue", alpha=0.7, edgecolor="black")
+        plt.title("Phase (p)")
+        plt.xlabel("Phase")
+        plt.ylabel("Frequency")
+        plt.gca().yaxis.set_major_locator(MaxNLocator(integer=True))
+
+
+        # Frequency (f)
+        plt.subplot(2, 2, 2)
+        plt.hist(f, bins=n_bins, color="green", alpha=0.7, edgecolor="black")
+        plt.title("Frequency (f)")
+        plt.xlabel("Frequency")
+        plt.ylabel("Frequency")
+        plt.gca().yaxis.set_major_locator(MaxNLocator(integer=True))  
+
+
+        # Amplitude (a)
+        plt.subplot(2, 2, 3)
+        plt.hist(a, bins=n_bins, color="red", alpha=0.7, edgecolor="black")
+        plt.title("Amplitude (a)")
+        plt.xlabel("Amplitude")
+        plt.ylabel("Frequency")
+        plt.gca().yaxis.set_major_locator(MaxNLocator(integer=True))  
+
+
+        # Bias (b)
+        plt.subplot(2, 2, 4)
+        plt.hist(b, bins=n_bins, color="orange", alpha=0.7, edgecolor="black")
+        plt.title("Bias (b)")
+        plt.xlabel("Bias")
+        plt.ylabel("Frequency")
+        plt.gca().yaxis.set_major_locator(MaxNLocator(integer=True))  
+        
+        img = self._fig_to_PIL_img(fig)
+        plt.close()
+
+        return img
     
     
     def _visualize_log_spectogram(self, x, y, n_bins: int = 500) -> PIL.Image:
