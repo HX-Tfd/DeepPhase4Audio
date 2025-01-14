@@ -1,5 +1,5 @@
 metadata:
-  run_name: 'PAEInputFlattened_large_kernel_stft'
+  run_name: 'twotone'
   log_dir: 'logs'
   logging: True
 
@@ -9,12 +9,12 @@ dataset_config:
   resume: null
 
 training_config:
-  num_epochs: 50
+  num_epochs: 400
   batch_size: 10
   batch_size_validation: 10
   optimizer: 'adam'
-  optimizer_lr: 0.0001
-  optimizer_momentum: 0.9
+  optimizer_lr: 0.001
+  optimizer_momentum: 0.8
   optimizer_weight_decay: 0.001
   optimizer_float_16: False
   lr_scheduler: 'poly'
@@ -25,13 +25,13 @@ model_config:
   experiment_name: 'PAEInputFlattenedModel'
   model_name: 'pae_flat'
   input_channels: 1
-  intermediate_channels: 3 # 16
-  embedding_channels: 6
+  intermediate_channels: 32 # 16
+  embedding_channels: 16
   kernel_size: 51
   time_range: 32000
   window: 2.0
-  dilation: 10
+  dilation: 10 # is irrelevant for multi dialation since fixed in code
 
 worker_config:
   workers: 0
-  workers_validation: 0
+  workers_validation: 0 

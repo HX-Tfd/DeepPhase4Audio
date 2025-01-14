@@ -16,13 +16,16 @@ from src.datasets.definitions import SPLIT_TRAIN, SPLIT_TEST, SPLIT_VALID
 from src.utils.metrics import simple_metric
 from src.utils.helpers import resolve_dataset_class, resolve_lr_scheduler, resolve_model_class, resolve_optimizer
 from src.losses.stft_loss import STFTLoss, MultiResolutionSTFTLoss
+import soundfile as sf
+
 
 class PAEInputFlattenedModel(pl.LightningModule):
 
     def __init__(self, cfg, **kwargs) -> None:
         super(PAEInputFlattenedModel, self).__init__()
         self.cfg = cfg
-
+        
+        self.saved_once = False
         self.D, self.N, self.K = cfg.input_channels, cfg.time_range, cfg.embedding_channels
         dataset_class = resolve_dataset_class(cfg.dataset)
         self.datasets = {
@@ -43,7 +46,7 @@ class PAEInputFlattenedModel(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         if torch.cuda.is_available():
             batch.to(self.device)
-        pred, _, _, _ = self.model(batch) # output is (y, latent, signal, param)
+        pred, _, _, param = self.model(batch) # output is (y, latent, signal, param)
         
         if self.D == 1:
             batch = batch.reshape(batch.shape[0], self.N)
@@ -54,7 +57,10 @@ class PAEInputFlattenedModel(pl.LightningModule):
         loss = self.loss(batch, pred)
         stft_loss = self.stft_loss(batch, pred)
         stft_sc, stft_mag = stft_loss[0], stft_loss[1]
-        loss_total = loss + stft_sc + stft_mag
+        amp_reg = self.loss(param[2],torch.zeros_like(param[2]))
+        loss_total = 5*loss + 0.01*stft_sc + 0.02*stft_mag # TODO remove the hard coded values
+
+
         self.log_dict(
             {
                 'loss_train/mse_loss': loss,
@@ -74,7 +80,6 @@ class PAEInputFlattenedModel(pl.LightningModule):
         # do something with all preds
         #self.training_step_outputs.clear()  # free memory
         pass
-
 
     def validation_step(self, batch, batch_idx):
         if torch.cuda.is_available():
@@ -135,6 +140,19 @@ class PAEInputFlattenedModel(pl.LightningModule):
             batch.to(self.device)
         pred, _, _, _ = self.model(batch)
         metrics_mae = self.metric(batch, pred.reshape(pred.shape[0], self.D, self.N))
+        
+        for i in range(batch.shape[0]):
+            if not self.device == 'cpu':
+                act = batch[i,0].cpu().numpy()
+                pre = pred[i].cpu().numpy()
+            else:
+                act = batch[i,0].numpy()
+                pre = pred[i].numpy()
+            
+            if not self.saved_once:
+                sf.write(f'save/actual_2signals_{i}.wav',act,16000)
+                sf.write(f'save/pred_2signals_{i}.wav', pre,16000)
+                self.saved_once = True
 
         self.log_dict(
             {

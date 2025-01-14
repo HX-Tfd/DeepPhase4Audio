@@ -5,7 +5,7 @@ import yaml
 
 from src.datasets.data_processing import AudioDataset
 from src.datasets.dataset import MockDataset
-from src.models.PAE import AE, PAE, PAEInputFlattened,PAEWave,PAEDeep
+from src.models.PAE import * #AE, PAE, PAEInputFlattened,PAEWave,PAEDeep,PAElla
 
 
 class DotDict:
@@ -83,12 +83,13 @@ def resolve_dataset_class(name):
 
 def resolve_model_class(name, cfg):
     return {
-        #'pae_deep':PAEDeep,
-        'pae': PAE(cfg),
-        'pae_flat': PAEInputFlattened(cfg),
-        'ae': AE(cfg),
-        #'pae_wave': PAEWave(cfg),
-    }[name]
+        'pae_deep':PAEDeep,
+        'paella': PAElla,
+        'pae': PAE,
+        'pae_flat': PAEInputFlattened,
+        'ae': AE,
+        'pae_wave': PAEWave,
+    }[name](cfg)
 
 
 def resolve_optimizer(cfg, params):
