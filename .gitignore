@@ -21,7 +21,12 @@ docs/source-pytorch/_static/fetched-s3-assets
 docs/source-pytorch/integrations/hpu
 docs/source-pytorch/integrations/strategies/Hivemind.rst
 
+# maybe dont upload every callback and logging file
+logs/
+save/
+tmp/
 docs/source-fabric/*/generated
+
 
 # C extensions
 *.so

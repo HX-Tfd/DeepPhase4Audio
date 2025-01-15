@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 
 from sklearn.model_selection import ParameterGrid
-from pytorch_lightning import Trainer
+from pytorch_lightning import Trainer, seed_everything
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger, CSVLogger
 from pytorch_lightning.callbacks import TQDMProgressBar
@@ -22,7 +22,7 @@ from src.utils.helpers import get_device_accelerator
 
 def main():
     cfg = yaml_config_parser() # note that the namespaces are accessed differently
-    
+    seed_everything(42)
     # Resolve name task
     model_name = cfg.experiment_name
     model = eval(model_name)(cfg)
@@ -80,7 +80,7 @@ def main():
 
     trainer = Trainer(
         logger=[wandb_logger, csv_logger] if cfg.logging else False,
-        callbacks=[checkpoint_local_callback, tqdm_progress_bar, early_stopping],
+        callbacks=[checkpoint_local_callback, rich_progress_bar],
         accelerator=get_device_accelerator(preferred_accelerator='cuda'),
         devices=1,
         default_root_dir=cfg.ckpt_save_dir, 

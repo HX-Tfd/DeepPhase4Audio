@@ -13,7 +13,7 @@ from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTh
 
 from src.utils.config import command_line_parser, yaml_config_parser
 from src.experiments.pae_deep import PAEDeepModel # don't remove this
-from experiments.pae_wave import PAEWaveModel
+from src.experiments.pae_wave import PAEWaveModel
 from src.experiments.ae import AEModel
 from src.utils.helpers import get_device_accelerator 
 

@@ -126,11 +126,27 @@ class PAE(nn.Module):
         y = y.reshape(y.shape[0], self.input_channels*self.time_range)
 
         return y, latent, signal, params
-       
+
+
+class MultiDilationConv(nn.Module):
+    def __init__(self, input_channels, output_channels, kernel_size, dilation_rates):
+        super(MultiDilationConv, self).__init__()
+        self.paths = nn.ModuleList([
+            nn.Conv1d(
+                input_channels, output_channels, kernel_size, 
+                stride=1, padding=(kernel_size - 1) // 2 * d, dilation=d, bias=True
+            )
+            for d in dilation_rates
+        ])
+        
+    def forward(self, x):
+        x = x.float()
+        outputs = [path(x) for path in self.paths]
+        combined = torch.cat(outputs, dim=1)  # concat along channel dimension
+        return combined
+
+
 class PAEInputFlattened(nn.Module):
-    """
-    The PAE model adapted to accept 1D input
-    """
     def __init__(self, cfg):
         super(PAEInputFlattened, self).__init__()
         self.input_channels = cfg.input_channels
@@ -138,29 +154,45 @@ class PAEInputFlattened(nn.Module):
         self.time_range = cfg.time_range
         self.window = cfg.window
 
-        self.tpi = Parameter(torch.from_numpy(np.array([2.0*np.pi], dtype=np.float32)), requires_grad=False)
-        self.args = Parameter(torch.from_numpy(np.linspace(-self.window/2, self.window/2, self.time_range, dtype=np.float32)), requires_grad=False)
-        self.freqs = Parameter(torch.fft.rfftfreq(self.time_range)[1:] * self.time_range / self.window, requires_grad=False) #Remove DC frequency
+        self.tpi = Parameter(torch.from_numpy(np.array([2.0 * np.pi], dtype=np.float32)), requires_grad=False)
+        self.args = Parameter(torch.from_numpy(np.linspace(-self.window / 2, self.window / 2, self.time_range, dtype=np.float32)), requires_grad=False)
+        self.freqs = Parameter(torch.fft.rfftfreq(self.time_range)[1:] * self.time_range / self.window, requires_grad=False)  # Remove DC frequency
 
-        intermediate_channels = cfg.intermediate_channels # int(self.input_channels/3)
-        
-        self.conv1 = nn.Conv1d(self.input_channels, intermediate_channels, kernel_size=cfg.kernel_size, stride=1, padding='same', dilation=cfg.dilation, groups=1, bias=True, padding_mode='zeros')
+        intermediate_channels = cfg.intermediate_channels
+
+        #MultiDilationConv for embedding
+        dilation_rates = [3, 17, 67, 199, 997]  # Specify dilation rates as needed
+        self.multi_dilated_conv1 = MultiDilationConv(self.input_channels, intermediate_channels, cfg.kernel_size, dilation_rates)
+        self.projection1 = nn.Conv1d(intermediate_channels * len(dilation_rates), intermediate_channels, kernel_size=1)
         self.norm1 = LN_v2(self.time_range)
-        self.conv2 = nn.Conv1d(intermediate_channels, self.embedding_channels, kernel_size=cfg.kernel_size, stride=1, padding='same', dilation=cfg.dilation, groups=1, bias=True, padding_mode='zeros')
 
+        #Added extra convolution and normalization in encoder
+        self.extra_conv1 = nn.Conv1d(intermediate_channels, intermediate_channels, kernel_size=3, padding=1)
+        self.extra_norm1 = LN_v2(self.time_range)
+
+        self.multi_dilated_conv2 = MultiDilationConv(intermediate_channels, self.embedding_channels, cfg.kernel_size, dilation_rates)
+        self.projection2 = nn.Conv1d(self.embedding_channels * len(dilation_rates), self.embedding_channels, kernel_size=1)
+
+        #Fully connected layers for phase calculation
         self.fc = torch.nn.ModuleList()
         for _ in range(self.embedding_channels):
             self.fc.append(nn.Linear(self.time_range, 2))
 
-        self.deconv1 = nn.Conv1d(self.embedding_channels, intermediate_channels, kernel_size=cfg.kernel_size, stride=1, padding='same', dilation=cfg.dilation, groups=1, bias=True, padding_mode='zeros')
+        # Decoding layers
+        self.multi_scale_conv = nn.ModuleList([
+            nn.Conv1d(self.embedding_channels, intermediate_channels, kernel_size=k, padding=(k - 1) // 2) 
+            for k in [3, 5, 7]
+        ])
+        self.deprojection1 = nn.Conv1d(intermediate_channels * len(self.multi_scale_conv), intermediate_channels, kernel_size=1)
         self.denorm1 = LN_v2(self.time_range)
-        self.deconv2 = nn.Conv1d(intermediate_channels, self.input_channels, kernel_size=cfg.kernel_size, stride=1, padding='same', dilation=cfg.dilation, groups=1, bias=True, padding_mode='zeros')
+        self.deconv2 = nn.Conv1d(intermediate_channels, self.input_channels, kernel_size=cfg.kernel_size, stride=1, 
+                                 padding=(cfg.kernel_size - 1) // 2, dilation=1, bias=True)
 
     #Returns the frequency for a function over a time window in s
     def FFT(self, function, dim):
         rfft = torch.fft.rfft(function, dim=dim)
         magnitudes = rfft.abs()
-        spectrum = magnitudes[:,:,1:] #Spectrum without DC component
+        spectrum = magnitudes[:, :, 1:]  # Spectrum without DC component
         power = spectrum**2
 
         #Frequency
@@ -170,7 +202,7 @@ class PAEInputFlattened(nn.Module):
         amp = 2 * torch.sqrt(torch.sum(power, dim=dim)) / self.time_range
 
         #Offset
-        offset = rfft.real[:,:,0] / self.time_range #DC component
+        offset = rfft.real[:, :, 0] / self.time_range  # DC component
 
         return freq, amp, offset
 
@@ -180,13 +212,19 @@ class PAEInputFlattened(nn.Module):
         #Signal Embedding
         y = y.reshape(y.shape[0], self.input_channels, self.time_range)
 
-        y = self.conv1(y)
+        y = self.multi_dilated_conv1(y)  # Expand channels
+        y = self.projection1(y)         # Reduce back to intermediate_channels
         y = self.norm1(y)
         y = F.elu(y)
 
-        y = self.conv2(y)
+        # Extra convolution in encoder
+        y = self.extra_conv1(y)
+        y = self.extra_norm1(y)
+        y = F.elu(y)
 
-        latent = y #Save latent for returning
+        y = self.multi_dilated_conv2(y)  # Expand channels
+        y = self.projection2(y)          # Reduce back to embedding_channels
+        latent = y  # Save latent for returning
 
         #Frequency, Amplitude, Offset
         f, a, b = self.FFT(y, dim=2)
@@ -194,32 +232,36 @@ class PAEInputFlattened(nn.Module):
         #Phase
         p = torch.empty((y.shape[0], self.embedding_channels), dtype=torch.float32, device=y.device)
         for i in range(self.embedding_channels):
-            v = self.fc[i](y[:,i,:])
-            p[:,i] = torch.atan2(v[:,1], v[:,0]) / self.tpi
+            v = self.fc[i](y[:, i, :])
+            p[:, i] = torch.atan2(v[:, 1], v[:, 0]) / self.tpi
 
         #Parameters    
         p = p.unsqueeze(2)
         f = f.unsqueeze(2)
         a = a.unsqueeze(2)
         b = b.unsqueeze(2)
-        params = [p, f, a, b] #Save parameters for returning
+        params = [p, f, a, b]  # Save parameters for returning
 
-        #Latent Reconstruction
+        # Latent Reconstruction
         y = a * torch.sin(self.tpi * (f * self.args + p)) + b
 
-        signal = y #Save signal for returning
+        signal = y  # Save signal for returning
 
-        #Signal Reconstruction
-        y = self.deconv1(y)
+        # Multi-scale feature extraction in decoder
+        recon_features = [conv(y) for conv in self.multi_scale_conv]
+        y = torch.cat(recon_features, dim=1)  # Concatenate multi-scale features
+
+        y = self.deprojection1(y)  # Reduce back to intermediate_channels
         y = self.denorm1(y)
         y = F.elu(y)
 
-        y = self.deconv2(y)
+        y = self.deconv2(y)  # Final reconstruction
 
-        y = y.reshape(y.shape[0], self.input_channels*self.time_range)
+        y = y.reshape(y.shape[0], self.input_channels * self.time_range)
 
         return y, latent, signal, params
-    
+
+
 class AE(PAE):
     """
     The PAE model with the latent construct removed
@@ -278,11 +320,17 @@ class AE(PAE):
 class PAEWave(nn.Module):
     def __init__(self, cfg):
         super(PAEWave, self).__init__()
+
+        seed = 42 # TODO change this generic seed that everyone uses!!
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
+
+
         self.input_channels = cfg.input_channels
         self.embedding_channels = cfg.embedding_channels
         self.time_range = cfg.time_range
         self.window = cfg.window
-        
+ 
         # PAE parameters
         self.tpi = Parameter(torch.from_numpy(np.array([2.0*np.pi], dtype=np.float32)), requires_grad=False)
         self.args = Parameter(torch.from_numpy(np.linspace(-self.window/2, self.window/2, self.time_range, dtype=np.float32)), requires_grad=False)
@@ -297,6 +345,7 @@ class PAEWave(nn.Module):
         self.dilation_channels = cfg.dilation_channels
         self.residual_channels = cfg.residual_channels
         self.skip_channels = cfg.skip_channels
+        self.classes = cfg.classes
         self.classes = cfg.classes
         self.kernel_size = cfg.kernel_size
         self.intermediate_channels = cfg.intermediate_channels
@@ -358,6 +407,7 @@ class PAEWave(nn.Module):
         self.end_conv_1 = nn.Conv1d(in_channels=self.skip_channels, out_channels=self.intermediate_channels, kernel_size=1, bias=True)
 
         self.end_conv_2 = nn.Conv1d(in_channels=self.intermediate_channels, out_channels=self.embedding_channels, kernel_size=1, bias=True)
+
         print(f"dilations for encoding: {new_dilation}")
         # ☆☆ then project wavenet to the embedding space in which we want to find the phase manifolds of size self.embedding_channels -- not sure, that might b redundant
         """
@@ -390,7 +440,7 @@ class PAEWave(nn.Module):
         print(f"dilations tensor for decoder : {dilations}")
     
         # Decoder initial projection
-        self.decoder_initial = nn.ConvTranspose1d(self.embedding_channels, self.residual_channels, 1)
+        self.decoder_initial = nn.ConvTranspose1d(self.embedding_channels, self.residual_channels, 1,bias=True)
 
         # Dilated convolution layers
         self.decoder_dilated = nn.ModuleList([
@@ -398,6 +448,7 @@ class PAEWave(nn.Module):
                 self.residual_channels,
                 self.dilation_channels * 2,
                 kernel_size=3,
+                bias=True,
                 padding=dilation if isinstance(dilation, int) else dilation[0],
                 dilation=dilation if isinstance(dilation, int) else dilation[0]
 
@@ -409,7 +460,8 @@ class PAEWave(nn.Module):
             nn.ConvTranspose1d(
                 self.dilation_channels,
                 self.residual_channels,
-                kernel_size=1
+                kernel_size=1,
+                bias=True
             ) for _ in self.dilations
         ])
         
@@ -418,7 +470,8 @@ class PAEWave(nn.Module):
             nn.ConvTranspose1d(
                 self.dilation_channels,
                 self.skip_channels,
-                kernel_size=1
+                kernel_size=1,
+                bias=True
             ) for _ in self.dilations
         ])
         
@@ -428,13 +481,15 @@ class PAEWave(nn.Module):
             nn.ConvTranspose1d(
                 self.skip_channels,
                 self.intermediate_channels,
-                kernel_size=1
+                kernel_size=1,
+                bias=True
             ),
             nn.ReLU(),
             nn.ConvTranspose1d(
                 self.intermediate_channels,
                 self.input_channels,
-                kernel_size=1
+                kernel_size=1,
+                bias=True
             )
         )
 
@@ -641,7 +696,7 @@ class PAEWave(nn.Module):
             # Gating mechanism
             tanh_out, sigmoid_out = torch.chunk(x, 2, dim=1)
             x = torch.tanh(tanh_out) * torch.sigmoid(sigmoid_out)
-            
+            #x = tanh_out * sigmoid_out # maybe dont do the gating mechanism
             # Split for residual and skip connections
             # For skip connection
             s = skip(x)
@@ -688,7 +743,7 @@ class PAEWave(nn.Module):
         # Input shape: [B, input_channels, T]
         y = x.reshape(x.shape[0], self.input_channels, self.time_range)
 
-        print(f"y before encoding : {y.shape}")
+        #print(f"y before encoding : {y.shape}")
     
         # μ-law encoding necessary ?
     
@@ -725,6 +780,9 @@ class PAEWave(nn.Module):
         y = y.reshape(y.shape[0], self.input_channels*self.time_range)
     
         return y, latent, signal, params
+
+
+
 
 
 
@@ -802,7 +860,7 @@ class PAEDeep(nn.Module):
             v = self.fc[i](y[:,i,:])
             p[:,i] = torch.atan2(v[:,1], v[:,0]) / self.tpi
 
-        #Parameters    
+        #Parameters
         p = p.unsqueeze(2)
         f = f.unsqueeze(2)
         a = a.unsqueeze(2)
@@ -826,6 +884,125 @@ class PAEDeep(nn.Module):
         y = y.reshape(y.shape[0], self.input_channels*self.time_range)
 
         return y, latent, signal, params
+    
+
+class PAElla(nn.Module):
+    """
+    The PAE model adapted to accept 1D input
+    """
+    seed = 42 # TODO change this generic seed that everyone uses!!
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    
+    def __init__(self, cfg):
+        super(PAElla, self).__init__()
+        self.input_channels = cfg.input_channels
+        self.embedding_channels = cfg.embedding_channels
+        self.time_range = cfg.time_range
+        self.window = cfg.window
+
+        self.tpi = Parameter(torch.from_numpy(np.array([2.0*np.pi], dtype=np.float32)), requires_grad=False)
+        self.args = Parameter(torch.from_numpy(np.linspace(-self.window/2, self.window/2, self.time_range, dtype=np.float32)), requires_grad=False)
+        self.freqs = Parameter(torch.fft.rfftfreq(self.time_range)[1:] * self.time_range / self.window, requires_grad=False) #Remove DC frequency
+
+        self.first_layer = nn.ModuleList()
+        self.second_layer = nn.ModuleList()
+        self.embedding_channels = cfg.embedding_channels
+        self.depth = int(math.log2(self.embedding_channels))
+        self.deconv_layers =[]
+
+        for i in range(self.embedding_channels):
+            conv1 =nn.Conv1d(1, 2, kernel_size=cfg.kernel_size, stride=1, padding='same', dilation=(2**i), groups=1, bias=True, padding_mode='zeros')
+            conv2 = nn.Conv1d(2, 1, kernel_size=cfg.kernel_size, stride=1, padding='same', dilation=(2**i), groups=1, bias=True, padding_mode='zeros')
+            self.first_layer.append(conv1)
+            self.second_layer.append(conv2)
+
+
+        for i in range(self.depth):
+            deconv_layer_i = nn.ModuleList()
+            for j in range(2**(self.depth-i-1)):
+                conv = nn.Conv1d(2,1, kernel_size=cfg.kernel_size, stride=1, padding='same', dilation=1, groups=1, bias=True, padding_mode='zeros')
+                deconv_layer_i.append(conv)
+            self.deconv_layers.append(deconv_layer_i)
+
+
+        self.final_conv = nn.Conv1d(2, self.input_channels, kernel_size=cfg.kernel_size, stride=1, padding='same', dilation=1, groups=1, bias=True, padding_mode='zeros')
+
+        self.fc = torch.nn.ModuleList()
+        for _ in range(self.embedding_channels):
+            self.fc.append(nn.Linear(self.time_range, 2))
+
+        
+    #Returns the frequency for a function over a time window in s
+    def FFT(self, function, dim):
+        rfft = torch.fft.rfft(function, dim=dim)
+        magnitudes = rfft.abs()
+        spectrum = magnitudes[:,:,1:] #Spectrum without DC component
+        power = spectrum**2
+
+        #Frequency
+        freq = torch.sum(self.freqs * power, dim=dim) / torch.sum(power, dim=dim)
+
+        #Amplitude
+        amp = 2 * torch.sqrt(torch.sum(power, dim=dim)) / self.time_range
+
+        #Offset
+        offset = rfft.real[:,:,0] / self.time_range #DC component
+
+        return freq, amp, offset
+
+    def forward(self, x):
+        y = x
+
+        #Signal Embedding
+        y = y.reshape(y.shape[0], self.input_channels, self.time_range)
+        y2 = torch.zeros(y.shape[0],self.embedding_channels, self.time_range)
+        y2 = []
+
+        for i in range(self.embedding_channels):
+            y1 = self.first_layer[i](y)
+            y2.append(self.second_layer[i](y1))
+
+        # Concatenate the outputs of all second_layer convolutions along the channel dimension
+        y = torch.cat(y2, dim=1)
+
+        latent = y #Save latent for returning
+
+        #Frequency, Amplitude, Offset
+        f, a, b = self.FFT(y, dim=2)
+
+        #Phase
+        p = torch.empty((y.shape[0], self.embedding_channels), dtype=torch.float32, device=y.device)
+        for i in range(self.embedding_channels):
+            
+            v = self.fc[i](y[:,i,:])
+            p[:,i] = torch.atan2(v[:,1], v[:,0]) / self.tpi
+
+        #Parameters    
+        p = p.unsqueeze(2)
+        f = f.unsqueeze(2)
+        a = a.unsqueeze(2)
+        b = b.unsqueeze(2)
+        params = [p, f, a, b] #Save parameters for returning
+
+        #Latent Reconstruction
+        y = a * torch.sin(self.tpi * (f * self.args + p)) + b
+
+        signal = y #Save signal for returning
+
+        #Signal Reconstruction
+   
+        for j in range(self.depth):
+            y1 = []#torch.zeros(y.shape[0], 4, self.time_range)
+            for i in range(2**(self.depth-j-1)):
+                y1.append(self.deconv_layers[j][i](y[:,2*i:(2*i+2),:]))
+            y1 = torch.cat(y1, dim=1)
+            y = y1
+        
+        y = y.reshape(y.shape[0], self.input_channels*self.time_range)
+
+        return y, latent, signal, params
+    
     
 if __name__ == "__main__":
     from src.utils.helpers import DotDict

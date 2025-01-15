@@ -1,5 +1,0 @@
-epoch,loss_train/mse_loss,loss_train/stft_loss_magnitude,loss_train/stft_loss_spectral_convergence,loss_train/total_loss,loss_val/mse_loss,loss_val/stft_loss_magnitude,loss_val/stft_loss_spectral_convergence,loss_val/total_loss,metrics/MAE_test,metrics/MAE_val,step
-0,,,,,0.16863925755023956,1.8473769426345825,0.8111587762832642,2.8271749019622803,,0.3289659321308136,8
-1,0.16218985617160797,1.8482977151870728,0.8216274380683899,2.8321149349212646,,,,,,,9
-1,,,,,0.234521746635437,1.6426602602005005,0.6737167239189148,2.550898790359497,,0.38725194334983826,17
-2,,,,,,,,,0.3738117218017578,,18

@@ -1,3 +1,0 @@
-epoch,loss_val/mse_loss,loss_val/stft_loss_magnitude,loss_val/stft_loss_spectral_convergence,loss_val/total_loss,metrics/MAE_test,metrics/MAE_val,step
-0,0.2345842570066452,1.8440378904342651,0.7090610861778259,2.7876832485198975,,0.39035001397132874,8
-1,,,,,0.39668458700180054,,9

@@ -25,13 +25,13 @@ model_config:
   experiment_name: 'PAEDeepModel'
   model_name: 'pae_deep'
   input_channels: 1
-  intermediate_channels2: 2 # 16
+  intermediate_channels2: 1 # 16
   intermediate_channels1: 1 # TODO: remove
-  embedding_channels: 3
+  embedding_channels: 4
   kernel_size: 50
   time_range: 32000
   window: 2.0
-  dilation: 5
+  dilation: 7
 
 worker_config:
   workers: 7

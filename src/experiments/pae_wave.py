@@ -28,6 +28,7 @@ class PAEWaveModel(pl.LightningModule):
         super(PAEWaveModel, self).__init__()
         self.cfg = cfg
         self.g_count = 0
+        self.saved_once = False
         self.D, self.N, self.K = cfg.input_channels, cfg.time_range, cfg.embedding_channels
         dataset_class = resolve_dataset_class(cfg.dataset)
         self.datasets = {
@@ -64,7 +65,7 @@ class PAEWaveModel(pl.LightningModule):
         stft_sc, stft_mag = stft_loss[0], stft_loss[1]
         amp_reg = self.loss(param[2],torch.zeros_like(param[2]))
         # period_loss = self.periodicity_loss(pred) * 0.1  # Weight factor
-        loss_total = loss + stft_sc + stft_mag # + period_loss #+ self.lambda_1*amp_reg
+        loss_total = loss + 0.01*stft_sc + 0.02*stft_mag # + period_loss #+ self.lambda_1*amp_reg
 
         self.log_dict(
             {
@@ -148,11 +149,18 @@ class PAEWaveModel(pl.LightningModule):
         pred, _, _, _ = self.model(batch)
         metrics_mae = self.metric(batch, pred.reshape(pred.shape[0], self.D, self.N))
         
-        for i in range(self.cfg.batch_size):
-            act = batch[i,0].cpu().numpy()
-            pre = pred[i].cpu().numpy()
-            sf.write(f'actual_2signals_{i}.wav',act,16000)
-            sf.write(f'pred_2signals_{i}.wav', pre,16000)
+        for i in range(batch.shape[0]):
+            if not self.device == 'cpu':
+                act = batch[i,0].cpu().numpy()
+                pre = pred[i].cpu().numpy()
+            else:
+                act = batch[i,0].cpu().numpy()
+                pre = pred[i].cpu().numpy()
+            
+            if not self.saved_once:
+                sf.write(f'actual_2signals_{i}.wav',act,16000)
+                sf.write(f'pred_2signals_{i}.wav', pre,16000)
+                self.saved_once = True
 
         self.log_dict(
             {
