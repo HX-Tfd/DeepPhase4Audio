@@ -76,7 +76,7 @@ def main():
     """
     trainer = Trainer(
         logger=[wandb_logger, csv_logger] if cfg.metadata.logging else False,
-        callbacks=[checkpoint_local_callback, rich_progress_bar],
+        callbacks=[checkpoint_local_callback, tqdm_progress_bar],
         accelerator=get_device_accelerator(preferred_accelerator='cuda'),
         devices=1,
         default_root_dir=cfg.training_config.ckpt_save_dir, 
@@ -89,7 +89,7 @@ def main():
 
     # train and test the model
     trainer.fit(model, ckpt_path=cfg.training_config.resume)
-    # trainer.test(model)
+    trainer.test(model)
 
 
 if __name__ == '__main__':

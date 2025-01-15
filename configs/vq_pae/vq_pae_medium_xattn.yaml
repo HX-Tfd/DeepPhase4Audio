@@ -1,7 +1,7 @@
 metadata:
-  run_name: 'VQ_VAE_DAC_medium_xattn_separate_ffn'
+  run_name: 'VQ_VAE_DAC_threetone_arpegiator'
   log_dir: 'logs'
-  logging: Yes
+  logging: YES
 
 dataset_config:
   dataset: 'audio_dataset'
