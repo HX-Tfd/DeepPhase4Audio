@@ -1,11 +1,11 @@
 metadata:
-  run_name: 'twotone'
+  run_name: 'threetone'
   log_dir: 'logs'
   logging: True
 
 dataset_config:
   dataset: 'audio_dataset'
-  dataset_root: 'data/test'
+  dataset_root: 'data/'
   resume: null
 
 training_config:
