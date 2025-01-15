@@ -22,10 +22,11 @@ docs/source-pytorch/integrations/hpu
 docs/source-pytorch/integrations/strategies/Hivemind.rst
 
 # maybe dont upload every callback and logging file
-logs/
-save/
+logs
+save
 tmp/
 docs/source-fabric/*/generated
+configs/paeflat.yaml
 
 
 # C extensions
