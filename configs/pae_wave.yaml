@@ -5,7 +5,7 @@ metadata:
 
 dataset_config:
   dataset: 'audio_dataset'
-  dataset_root: 'data/test'
+  dataset_root: 'data'
   resume: null
 
 training_config:

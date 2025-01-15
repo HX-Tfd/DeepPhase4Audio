@@ -8,6 +8,7 @@ from pytorch_lightning import Trainer, seed_everything
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger, CSVLogger
 from pytorch_lightning.callbacks import TQDMProgressBar
+from pytorch_lightning.callbacks import EarlyStopping
 from pytorch_lightning.callbacks import RichProgressBar
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
 
@@ -16,6 +17,7 @@ from src.experiments.pae_deep import PAEDeepModel # don't remove this
 from src.experiments.pae_wave import PAEWaveModel
 from src.experiments.ae import AEModel
 from src.utils.helpers import get_device_accelerator 
+
 
 
 def main():
@@ -50,6 +52,14 @@ def main():
         mode='min',
     )
 
+    early_stopping = EarlyStopping(
+        monitor='loss_val/total_loss',  # Monitor validation loss
+        patience=5,                     # Number of epochs to wait before stopping
+        min_delta=0.001,               # Minimum change to qualify as an improvement
+        mode='min',                    # 'min' because we want loss to decrease
+        verbose=True                   # Print message when early stopping happens
+    )
+
     # if this doesn't work (e.g. rich install fails) use TQDM progressbar instead (below)
     rich_progress_bar = RichProgressBar( 
         theme=RichProgressBarTheme(
@@ -65,6 +75,7 @@ def main():
             metrics_format=".3e",
         )
     )
+    tqdm_progress_bar = TQDMProgressBar(refresh_rate=10)
 
 
     trainer = Trainer(

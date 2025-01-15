@@ -10,6 +10,8 @@ from torch.nn.parameter import Parameter
 import torch.nn as nn
 import torch.nn.functional as F
 from src.models.wavenet_modules import *
+import matplotlib.pyplot as plt
+import os
 
 class LN_v2(nn.Module):
     def __init__(self, dim, epsilon=1e-5):
@@ -343,6 +345,7 @@ class PAEWave(nn.Module):
         self.dilation_channels = cfg.dilation_channels
         self.residual_channels = cfg.residual_channels
         self.skip_channels = cfg.skip_channels
+        self.classes = cfg.classes
         self.classes = cfg.classes
         self.kernel_size = cfg.kernel_size
         self.intermediate_channels = cfg.intermediate_channels
@@ -777,6 +780,8 @@ class PAEWave(nn.Module):
         y = y.reshape(y.shape[0], self.input_channels*self.time_range)
     
         return y, latent, signal, params
+
+
 
 
 
