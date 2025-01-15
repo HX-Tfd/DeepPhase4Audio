@@ -205,6 +205,25 @@ class VQ_AE(PAE):
         self.encoder = nn.Sequential(*enc_modules)
         self.decoder = nn.Sequential(*dec_modules)
         
+        # process latents by separate FFNs because the features and control signals are not in the same space (?)
+        self.phase_ffn = nn.Sequential(
+            nn.LayerNorm(self.embedding_channels),
+            nn.Linear(self.embedding_channels, self.embedding_channels * 2),
+            self.activation,
+            nn.LayerNorm(self.embedding_channels*2),
+            nn.Linear(self.embedding_channels * 2, self.embedding_channels),
+            self.activation,
+        )
+        self.vq_ffn = nn.Sequential(
+            nn.LayerNorm(self.embedding_channels),
+            nn.Linear(self.embedding_channels, self.embedding_channels * 2),
+            self.activation,
+            nn.LayerNorm(self.embedding_channels*2),
+            nn.Linear(self.embedding_channels * 2, self.embedding_channels),
+            self.activation,
+        )
+        
+        
         self.fc = torch.nn.ModuleList()
         for _ in range(self.embedding_channels):
             self.fc.append(nn.Linear(self.time_range, 2))
@@ -220,11 +239,17 @@ class VQ_AE(PAE):
             )
 
         if not self.vq_only:
-            self.latent_combinator = CACombiner(in_ch=self.embedding_channels,
-                                                key_ch=self.embedding_channels,
-                                                value_ch=self.embedding_channels,
-                                                n_heads=8
-                                                ) #MLPCombiner(channels=self.embedding_channels)
+            if cfg.combiner == 'xattn':
+                self.latent_combinator = CACombiner(in_ch=self.embedding_channels,
+                                                    key_ch=self.embedding_channels,
+                                                    value_ch=self.embedding_channels,
+                                                    n_heads=8
+                                                    )
+            elif cfg.combiner == 'concat':
+                self.latent_combinator = MLPCombiner(channels=self.embedding_channels)
+            else:
+                raise NotImplementedError(f"combiner module {cfg.combiner} is not implemented!")
+        
         
     def FFT(self, function, dim):
         rfft = torch.fft.rfft(function, dim=dim)
@@ -259,17 +284,19 @@ class VQ_AE(PAE):
         z_pae = z 
         
         # rvq
-        z_vq, codes, latents, commitment_loss, codebook_loss = self.quantizer(z, n_quantizers) 
+        z_vq = self.vq_ffn(z.permute(0, 2, 1))
+        z_vq, codes, latents, commitment_loss, codebook_loss = self.quantizer(z_vq.permute(0, 2, 1), n_quantizers) 
         z_comb = z_vq
         
         # disentangle phase 
         z_recon, phase_params = None, None
         if not self.vq_only:
-            f, a, b = self.FFT(z, dim=2) # Frequency, Amplitude, Offset
+            z_phase = self.phase_ffn(z.permute(0, 2, 1)).permute(0, 2, 1) # weird flex
+            f, a, b = self.FFT(z_phase, dim=2) # Frequency, Amplitude, Offset
 
-            p = torch.empty((z.shape[0], self.embedding_channels), dtype=torch.float32, device=z.device)
+            p = torch.empty((z_phase.shape[0], self.embedding_channels), dtype=torch.float32, device=z_phase.device)
             for i in range(self.embedding_channels):
-                v = self.fc[i](z[:,i,:])
+                v = self.fc[i](z_phase[:,i,:])
                 p[:,i] = torch.atan2(v[:,1], v[:,0]) / self.tpi
 
             p = p.unsqueeze(2)
@@ -320,7 +347,8 @@ if __name__ == "__main__":
             'codebook_size': 128,
             'codebook_dim': 8,
             'quantizer_dropout': 0.0,
-        }
+        },
+        'combiner': 'concat'
     })
     
     model = VQ_AE(cfg)
@@ -349,5 +377,3 @@ if __name__ == "__main__":
     print(x_recon.shape, z_pae.shape, z_vq.shape, codes.shape, latents.shape)
     print(z_recon.shape, p.shape, f.shape, a.shape, b.shape)
     print(torch.cat((z_recon, z_vq), dim=1).shape)
-
-

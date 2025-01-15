@@ -55,6 +55,7 @@ model_config:
     codebook_dim: 8
     quantizer_dropout: 0.5
   activation: 'elu'
+  combiner: 'concat'
 
 worker_config:
   workers: 0

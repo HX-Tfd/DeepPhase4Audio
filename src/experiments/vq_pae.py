@@ -210,7 +210,6 @@ class VQ_PAEModel(pl.LightningModule):
             Plot input signal x against output signal y, plot latent signals
         """
         assert len(x.shape) == len(y.shape) == 1, "int/out have to be flattened 1D tensors"
-        
         if signal is not None:
             assert len(signal.shape) == 2, "latent signal has to be a 2D tensor"
             signal = signal.detach().cpu().numpy()

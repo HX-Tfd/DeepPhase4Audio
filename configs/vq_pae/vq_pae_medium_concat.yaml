@@ -1,5 +1,5 @@
 metadata:
-  run_name: 'VQ_VAE_DAC_medium_xattn_separate_ffn'
+  run_name: 'VQ_PAE_Simple_concat'
   log_dir: 'logs'
   logging: Yes
 
@@ -10,9 +10,9 @@ dataset_config:
 
 training_config:
   grid_search: No
-  num_epochs: 200
-  batch_size: 8
-  batch_size_validation: 8
+  num_epochs: 100
+  batch_size: 16
+  batch_size_validation: 16
   optimizer: 'adam'
   optimizer_lr: 0.001
   optimizer_momentum: 0.9
@@ -55,7 +55,7 @@ model_config:
     codebook_dim: 8
     quantizer_dropout: 0.5
   activation: 'elu'
-  combiner: 'xattn'
+  combiner: 'concat'
 
 worker_config:
   workers: 0
