@@ -170,7 +170,6 @@ mlruns/
 *.ckpt
 test-reports/
 wandb
-wandb.key
 .forked/
 *.prof
 *.tar.gz
