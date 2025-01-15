@@ -6,7 +6,7 @@ import scipy.signal as signal
 import soundfile as sf
 
 
-def preprocess_audio(file_path, lowpass_cutoff=8000, original_rate=44100, target_rate=16000, window_length=2):
+def preprocess_audio(file_path, lowpass_cutoff=8000, original_rate=44100, target_rate=16000, window_length=2, overlap=2):
 
     audio, sr = sf.read(file_path)
     audio = np.mean(audio, axis=1) #Convert audio to mono
@@ -26,7 +26,7 @@ def preprocess_audio(file_path, lowpass_cutoff=8000, original_rate=44100, target
     
     # make 2-second windows
     window_size = target_rate * window_length
-    step_size = window_size // 2  # 50% overlap
+    step_size = window_size // overlap
 
     windows = [
         downsampled_audio[i:i + window_size]
