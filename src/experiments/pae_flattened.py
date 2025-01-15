@@ -54,7 +54,7 @@ class PAEInputFlattenedModel(pl.LightningModule):
         loss = self.loss(batch, pred)
         stft_loss = self.stft_loss(batch, pred)
         stft_sc, stft_mag = stft_loss[0], stft_loss[1]
-        loss_total = loss + stft_sc + stft_mag
+        loss_total = 5*loss + 0.01*stft_sc + 0.02*stft_mag
         self.log_dict(
             {
                 'loss_train/mse_loss': loss,
