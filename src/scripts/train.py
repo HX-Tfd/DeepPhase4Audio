@@ -38,7 +38,7 @@ def main():
     if cfg.logging:
         csv_logger = CSVLogger(
             save_dir='logs',
-            name='Mock Experiment',
+            name=cfg.experiment_name,
         )
         wandb_logger = WandbLogger(
             name=run_name,
@@ -81,11 +81,15 @@ def main():
         num_sanity_val_steps=1,
         precision=16 if cfg.optimizer_float_16 else 32,
         log_every_n_steps=10,
-        profiler='simple'
+        profiler='simple',
+        enable_checkpointing=True,
     )
 
     # train and test the model
     trainer.fit(model, ckpt_path=cfg.resume)
+    print("saving model...")
+    trainer.save_checkpoint(f'logs/models/{model_name}_epoch_{cfg.num_epochs}.ckpt',weights_only=False)
+    print("...done")
     trainer.test(model)
 
 

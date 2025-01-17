@@ -154,6 +154,11 @@ class PAEInputFlattened(nn.Module):
         self.time_range = cfg.time_range
         self.window = cfg.window
 
+        seed = 42 # TODO change this generic seed that everyone uses!!
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
+
+
         self.tpi = Parameter(torch.from_numpy(np.array([2.0 * np.pi], dtype=np.float32)), requires_grad=False)
         self.args = Parameter(torch.from_numpy(np.linspace(-self.window / 2, self.window / 2, self.time_range, dtype=np.float32)), requires_grad=False)
         self.freqs = Parameter(torch.fft.rfftfreq(self.time_range)[1:] * self.time_range / self.window, requires_grad=False)  # Remove DC frequency
@@ -242,6 +247,75 @@ class PAEInputFlattened(nn.Module):
         b = b.unsqueeze(2)
         params = [p, f, a, b]  # Save parameters for returning
 
+        # Latent Reconstruction
+        y = a * torch.sin(self.tpi * (f * self.args + p)) + b
+
+        signal = y  # Save signal for returning
+
+        # Multi-scale feature extraction in decoder
+        recon_features = [conv(y) for conv in self.multi_scale_conv]
+        y = torch.cat(recon_features, dim=1)  # Concatenate multi-scale features
+
+        y = self.deprojection1(y)  # Reduce back to intermediate_channels
+        y = self.denorm1(y)
+        y = F.elu(y)
+
+        y = self.deconv2(y)  # Final reconstruction
+
+        y = y.reshape(y.shape[0], self.input_channels * self.time_range)
+
+        return y, latent, signal, params
+    
+
+    def masked_forward(self, x,fc_mask,latent_mask):
+        y = x
+        try:
+            assert fc_mask.size == self.embedding_channels and latent_mask.size == self.embedding_channels
+        except AssertionError:
+            print(f"Assertion failed: fc_mask.size ({fc_mask.size}) != self.embedding_channels ({self.embedding_channels})")
+            print(f"OR Assertion failed: latent_mask.size ({latent_mask.size}) != self.embedding_channels ({self.embedding_channels})")
+            raise
+
+        #Signal Embedding
+        y = y.reshape(y.shape[0], self.input_channels, self.time_range)
+
+        y = self.multi_dilated_conv1(y)  # Expand channels
+        y = self.projection1(y)         # Reduce back to intermediate_channels
+        y = self.norm1(y)
+        y = F.elu(y)
+
+        # Extra convolution in encoder
+        y = self.extra_conv1(y)
+        y = self.extra_norm1(y)
+        y = F.elu(y)
+
+        y = self.multi_dilated_conv2(y)  # Expand channels
+        y = self.projection2(y)          # Reduce back to embedding_channels
+        latent = y  # Save latent for returning
+
+        #Frequency, Amplitude, Offset
+        f, a, b = self.FFT(y, dim=2)
+
+        #Phase
+        p = torch.empty((y.shape[0], self.embedding_channels), dtype=torch.float32, device=y.device)
+        for i in range(self.embedding_channels):
+            v = self.fc[i](y[:, i, :])
+            p[:, i] = fc_mask[i]*torch.atan2(v[:, 1], v[:, 0]) / self.tpi
+                
+        
+        #Parameters    
+        p = p.unsqueeze(2)
+        f = f.unsqueeze(2)
+        a = a.unsqueeze(2)
+        b = b.unsqueeze(2)
+    
+        for i in range(self.embedding_channels):
+            p[:,i,:] *= latent_mask[i]
+            f[:,i,:] *= latent_mask[i]
+            a[:,i,:] *= latent_mask[i]
+            b[:,i,:] *= latent_mask[i]
+        
+        params = [p, f, a, b]  # Save parameters for returning
         # Latent Reconstruction
         y = a * torch.sin(self.tpi * (f * self.args + p)) + b
 
@@ -780,10 +854,6 @@ class PAEWave(nn.Module):
         y = y.reshape(y.shape[0], self.input_channels*self.time_range)
     
         return y, latent, signal, params
-
-
-
-
 
 
 class PAEDeep(nn.Module):

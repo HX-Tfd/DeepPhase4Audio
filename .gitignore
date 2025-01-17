@@ -23,10 +23,18 @@ docs/source-pytorch/integrations/strategies/Hivemind.rst
 
 # maybe dont upload every callback and logging file
 logs
-save
 tmp/
 docs/source-fabric/*/generated
 configs/paeflat.yaml
+
+
+# amaru's personal miscelaneous files :))
+get-pip.py
+plots
+save
+test_saved_model.py
+test_report.txt
+wandb.key
 
 
 # C extensions

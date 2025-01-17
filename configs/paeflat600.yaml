@@ -1,15 +1,16 @@
 metadata:
-  run_name: 'onetone_reconstruction_1eps'
+  run_name: 'paeflat_twotone_600eps'
   log_dir: 'logs'
-  logging: False
+  logging: True
 
 dataset_config:
   dataset: 'audio_dataset'
-  dataset_root: 'data/one'
+  dataset_root: 'data/two'
+  reconstruction_save_dir: 'save/paeflat_twotone_600eps'
   resume: null
 
 training_config:
-  num_epochs: 1
+  num_epochs: 600
   batch_size: 10
   batch_size_validation: 10
   optimizer: 'adam'
@@ -20,9 +21,9 @@ training_config:
   lr_scheduler: 'poly'
   lr_scheduler_power: 0.9
   ckpt_save_dir: 'logs/checkpoints'
-  mse_w: 2.0
-  stft_sc_w: 0.1
-  stft_mag_w: 0.1
+  mse_w: 5.0
+  stft_sc_w: 0.01
+  stft_mag_w: 0.02
 
 model_config:
   experiment_name: 'PAEInputFlattenedModel'
