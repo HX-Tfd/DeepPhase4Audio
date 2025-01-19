@@ -153,8 +153,8 @@ class PAEInputFlattenedModel(pl.LightningModule):
                 pre = pred[i].numpy()
             
             if not self.saved_once:
-                sf.write(f'save/actual_2signals_{i}.wav',act,16000)
-                sf.write(f'save/pred_2signals_{i}.wav', pre,16000)
+                sf.write(f'save/actual_eps_{self.cfg.num_epochs}_{self.cfg.embedding_channels}.wav',act,16000)
+                sf.write(f'save/pred_eps_{self.cfg.num_epochs}_emb_size_{self.cfg.embedding_channels}.wav', pre,16000)
                 self.saved_once = True
         
         self.log_dict(
