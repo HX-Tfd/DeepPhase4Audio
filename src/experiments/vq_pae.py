@@ -11,6 +11,7 @@ import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
 from torch.utils.data import DataLoader
 from audiotools import AudioSignal
+import soundfile as sf
 import wandb
 
 from src.datasets.definitions import SPLIT_TRAIN, SPLIT_TEST, SPLIT_VALID
@@ -29,6 +30,7 @@ class VQ_PAEModel(pl.LightningModule):
         self.model_config = cfg.model_config
         self.worker_config = cfg.worker_config
         self.loss_config = cfg.loss_config
+        self.saved_once = False
 
         self.D, self.N, self.K = self.model_config.input_channels, self.model_config.time_range, self.model_config.embedding_channels
         dataset_class = resolve_dataset_class(self.dataset_cfg.dataset)
@@ -146,6 +148,71 @@ class VQ_PAEModel(pl.LightningModule):
             self._log_figure(title=f"{title_prefix}/Latent Values", caption="Value Histogram of Learned Latent Parameters", 
                             img=fig_latent_val)
     
+    def test_step(self, batch, batch_idx):
+        # Move batch to the appropriate device if it's not on CPU already
+        if torch.cuda.is_available():
+            batch = batch.to(self.device)
+    
+        # Perform the forward pass
+        pred = self.model(batch)
+    
+    # Define a dictionary to store various loss metrics
+        loss_items = {}
+    
+    # Assuming pred contains the necessary output (similar to validation_step)
+        x_recon = pred["audio"]
+        z_recon = pred["z_recon"]
+        phase_params = pred["phase_params"]
+        vq_comm_loss = pred["vq/commitment_loss"]
+        vq_cb_loss = pred["vq/codebook_loss"]
+    
+    # Calculate various losses
+        loss_items["recon_loss"] = self.recon_loss(batch, x_recon)
+        stft_loss = self.stft_loss(batch, x_recon)
+        loss_items["stft_loss_spectral_convergence"], loss_items["stft_loss_magnitude"] = stft_loss[0], stft_loss[1]
+        loss_items["vq/codebook_loss"] = vq_cb_loss
+        loss_items["vq/commitment_loss"] = vq_comm_loss
+        loss_items["feature_matching_loss"] = self.feat_loss(self._to_audio_signal(batch), self._to_audio_signal(x_recon))
+        loss_items["mel_spectrogram_loss"] = self.mel_loss(self._to_audio_signal(batch), self._to_audio_signal(x_recon))
+
+        # Total loss calculation
+        loss_items["total_loss"] = sum([v * loss_items[k] for k, v in self.loss_weights.items() if k in loss_items])
+
+        # Log loss items
+        self.log_dict(
+            {f"loss_test/{k}": v for k, v in loss_items.items()},
+            on_step=False, on_epoch=True, prog_bar=True
+        )
+
+        # Select a random batch to log figures and save the audio signals
+        k = torch.randint(0, batch.shape[0], (1,)).item()
+        x = batch[k, ...]
+        y = x_recon[k, ...]
+        selected_latent_signal = z_recon[k, ...] if z_recon is not None else None
+        """
+        # Visualize the reconstruction and log it
+        title_prefix = 'images_test'
+        fig_reconstruction = self._visualize_reconstruction(x, y, selected_latent_signal)
+        figure_log_spectogram = self._visualize_log_spectogram(x, y)
+
+        self._log_figure(title=f"{title_prefix}/Reconstruction", caption="Input vs Reconstructed Signal", img=fig_reconstruction)
+        self._log_figure(title=f"{title_prefix}/Log Spectogram", caption="Input and Output Log Spectograms", img=figure_log_spectogram)
+    
+        # Optionally visualize the latent values
+        if not self.vq_only:
+            selected_params = [p[k, ...] for p in phase_params]
+            fig_latent_val = self._visualize_latent_values(selected_params)
+            self._log_figure(title=f"{title_prefix}/Latent Values", caption="Value Histogram of Learned Latent Parameters", img=fig_latent_val)
+        """
+        # Save the audio signals (this step could be adapted or removed based on your specific needs)
+        if not self.saved_once:
+            act = batch[k].cpu().numpy()
+            pre = x_recon[k].cpu().numpy()
+            sf.write(f'actual_2signals_{k}.wav', act, 16000)
+            sf.write(f'pred_2signals_{k}.wav', pre, 16000)
+            self.saved_once = True
+
+        return loss_items["total_loss"]
 
     def train_dataloader(self):
         return self._create_train_dataloader()
@@ -210,7 +277,6 @@ class VQ_PAEModel(pl.LightningModule):
             Plot input signal x against output signal y, plot latent signals
         """
         assert len(x.shape) == len(y.shape) == 1, "int/out have to be flattened 1D tensors"
-        
         if signal is not None:
             assert len(signal.shape) == 2, "latent signal has to be a 2D tensor"
             signal = signal.detach().cpu().numpy()

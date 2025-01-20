@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --ntasks=1                     
 #SBATCH --nodes=1 
-#SBATCH --account=dl
+#SBATCH --account=dl_jobs
 #SBATCH --output=logs/%j.out
 #SBATCH --mem-per-cpu=2G
 #SBATCH --time=00-6:00:00 

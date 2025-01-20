@@ -1,5 +1,5 @@
 metadata:
-  run_name: 'VQ_PAE_Simple_concat'
+  run_name: 'VQ_PAE_tiny_xattn_extra_ffn_64_ch_large_spect_weight'
   log_dir: 'logs'
   logging: Yes
 
@@ -28,7 +28,7 @@ loss_config:
     mse_loss: 1.0
     l1_loss: 2.0 # feature matching loss
     sisdr_loss: 0.0
-    stft_loss_spectral_convergence: 1.0
+    stft_loss_spectral_convergence: 20.0
     stft_loss_magnitude: 1.0
     mel_spectrogramm_loss: 15.0
     vq/commitment_loss: 1.0
@@ -40,7 +40,7 @@ model_config:
   vq_only: No
   input_channels: 1
   intermediate_channels: 64 # 16
-  embedding_channels: 128
+  embedding_channels: 64
   time_range: 32000 # sample rate
   window: 2.0
   use_fft_mlp: False
@@ -49,9 +49,9 @@ model_config:
   dec_dilation_rates: [1, 3, 9]
   dec_kernel_sizes: [3, 3, 7]
   vq:
-    input_dim: 128
+    input_dim: 64
     n_codebooks: 9
-    codebook_size: 1024
+    codebook_size: 128
     codebook_dim: 8
     quantizer_dropout: 0.5
   activation: 'elu'
