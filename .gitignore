@@ -33,7 +33,9 @@ get-pip.py
 plots
 save
 test_report.txt
+configs/vq_pae
 wandb.key
+miscelaneous
 
 
 # C extensions

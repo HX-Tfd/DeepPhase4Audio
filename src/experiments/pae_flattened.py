@@ -263,7 +263,7 @@ class PAEInputFlattenedModel(pl.LightningModule):
         plt.xlabel("Steps")
         plt.ylabel("Signal")
         plt.title("Input vs Reconstructed Signal")
-        plt.legend()
+        plt.legend(loc="lower right")
         plt.grid()
 
         # Plot each of the k signals in a different color
@@ -274,7 +274,7 @@ class PAEInputFlattenedModel(pl.LightningModule):
         plt.ylabel("Amplitude")
         plt.title(f"{self.K} Latent Signals")
         plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
-        plt.legend()
+        plt.legend(loc="lower left")
         
         img = self._fig_to_PIL_img(fig)
         plt.close()
