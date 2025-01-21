@@ -214,3 +214,5 @@ logs/
 get-pip.py
 configs/paeflat.yaml
 configs/vq_pae/tryout.yaml
+miscelaneous
+combinations.txt
