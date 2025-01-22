@@ -31,3 +31,4 @@ Required modules on Slurm:
 ## References
 
 1. [Periodic Autoencoders for Learning Motion Phase Manifolds](https://dl.acm.org/doi/10.1145/3528223.3530178)
+2. [PyTorch implementation of WaveNet](https://github.com/vincentherrmann/pytorch-wavenet/tree/master)
