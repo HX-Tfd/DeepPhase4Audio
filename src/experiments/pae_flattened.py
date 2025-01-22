@@ -8,6 +8,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import pytorch_lightning as pl
+from pytorch_lightning import seed_everything
 from pytorch_lightning.loggers import WandbLogger
 from torch.utils.data import DataLoader
 import wandb
@@ -16,13 +17,18 @@ from src.datasets.definitions import SPLIT_TRAIN, SPLIT_TEST, SPLIT_VALID
 from src.utils.metrics import simple_metric
 from src.utils.helpers import resolve_dataset_class, resolve_lr_scheduler, resolve_model_class, resolve_optimizer
 from src.losses.stft_loss import STFTLoss, MultiResolutionSTFTLoss
+import soundfile as sf
+
 
 class PAEInputFlattenedModel(pl.LightningModule):
 
     def __init__(self, cfg, **kwargs) -> None:
         super(PAEInputFlattenedModel, self).__init__()
         self.cfg = cfg
-
+        self.name = cfg.experiment_name
+        #self.save_hyperparameters()
+        seed_everything(42)
+        self.saved_once = False
         self.D, self.N, self.K = cfg.input_channels, cfg.time_range, cfg.embedding_channels
         dataset_class = resolve_dataset_class(cfg.dataset)
         self.datasets = {
@@ -43,7 +49,7 @@ class PAEInputFlattenedModel(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         if torch.cuda.is_available():
             batch.to(self.device)
-        pred, _, _, _ = self.model(batch) # output is (y, latent, signal, param)
+        pred, _, _, param = self.model(batch) # output is (y, latent, signal, param)
         
         if self.D == 1:
             batch = batch.reshape(batch.shape[0], self.N)
@@ -54,7 +60,10 @@ class PAEInputFlattenedModel(pl.LightningModule):
         loss = self.loss(batch, pred)
         stft_loss = self.stft_loss(batch, pred)
         stft_sc, stft_mag = stft_loss[0], stft_loss[1]
-        loss_total = loss + stft_sc + stft_mag
+        amp_reg = self.loss(param[2],torch.zeros_like(param[2]))
+        loss_total = self.cfg.mse_w*loss + self.cfg.stft_sc_w*stft_sc + self.cfg.stft_mag_w*stft_mag # TODO remove the hard coded values
+
+
         self.log_dict(
             {
                 'loss_train/mse_loss': loss,
@@ -75,7 +84,6 @@ class PAEInputFlattenedModel(pl.LightningModule):
         #self.training_step_outputs.clear()  # free memory
         pass
 
-
     def validation_step(self, batch, batch_idx):
         if torch.cuda.is_available():
             batch.to(self.device)
@@ -91,7 +99,7 @@ class PAEInputFlattenedModel(pl.LightningModule):
         stft_loss = self.stft_loss(batch, pred)
         metrics_mae = self.metric(batch, pred)
         stft_sc, stft_mag = stft_loss[0], stft_loss[1]
-        loss_total = loss + stft_sc + stft_mag
+        loss_total = loss + stft_sc + stft_mag 
         
         # log scalars
         self.log_dict(
@@ -135,13 +143,41 @@ class PAEInputFlattenedModel(pl.LightningModule):
             batch.to(self.device)
         pred, _, _, _ = self.model(batch)
         metrics_mae = self.metric(batch, pred.reshape(pred.shape[0], self.D, self.N))
-
+        
+        for i in range(batch.shape[0]):
+            if not self.device == 'cpu':
+                act = batch[i,0].cpu().numpy()
+                pre = pred[i].cpu().numpy()
+            else:
+                act = batch[i,0].numpy()
+                pre = pred[i].numpy()
+            
+            if not self.saved_once:
+                sf.write(f'save/actual_eps_{self.cfg.num_epochs}_{self.cfg.embedding_channels}.wav',act,16000)
+                sf.write(f'save/pred_eps_{self.cfg.num_epochs}_emb_size_{self.cfg.embedding_channels}.wav', pre,16000)
+                self.saved_once = True
+        
         self.log_dict(
             {
                 'metrics/MAE_test': metrics_mae
             }, on_step=False, on_epoch=True
         )
-
+        
+    def test(self, batch, batch_idx):
+        if torch.cuda.is_available():
+            batch.to(self.device)
+        pred, _, _, _ = self.model(batch)
+        metrics_mae = self.metric(batch, pred.reshape(pred.shape[0], self.D, self.N))
+        
+        for i in range(batch.shape[0]):
+            if not self.device == 'cpu':
+                act = batch[i,0].cpu().numpy()
+                pre = pred[i].cpu().numpy()
+            else:
+                act = batch[i,0].numpy()
+                pre = pred[i].numpy()
+            
+        return pred
 
     def test_end(self, outputs):
         return {}
@@ -166,9 +202,8 @@ class PAEInputFlattenedModel(pl.LightningModule):
     
 
     def on_load_checkpoint(self, checkpoint):
-        print("Custom logic when loading checkpoint")
-        # modify cfg or other attributes if needed
-        # self.cfg.some_param = checkpoint["hyper_param"]["some_param"]
+        super().on_load_checkpoint(checkpoint)
+        #self.load_state_dict(checkpoint["model_state_dict"])
 
 
     def _create_train_dataloader(self):
@@ -228,7 +263,7 @@ class PAEInputFlattenedModel(pl.LightningModule):
         plt.xlabel("Steps")
         plt.ylabel("Signal")
         plt.title("Input vs Reconstructed Signal")
-        plt.legend()
+        plt.legend(loc="lower right")
         plt.grid()
 
         # Plot each of the k signals in a different color
@@ -239,7 +274,7 @@ class PAEInputFlattenedModel(pl.LightningModule):
         plt.ylabel("Amplitude")
         plt.title(f"{self.K} Latent Signals")
         plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
-        plt.legend()
+        plt.legend(loc="lower left")
         
         img = self._fig_to_PIL_img(fig)
         plt.close()

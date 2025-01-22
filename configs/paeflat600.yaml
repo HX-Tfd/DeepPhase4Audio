@@ -1,0 +1,43 @@
+metadata:
+  run_name: 'paeflat_twotone_600eps'
+  log_dir: 'logs'
+  logging: True
+
+dataset_config:
+  dataset: 'audio_dataset'
+  dataset_root: 'data/two'
+  reconstruction_save_dir: 'save/paeflat_twotone_600eps'
+  resume: null
+
+training_config:
+  num_epochs: 600
+  batch_size: 10
+  batch_size_validation: 10
+  optimizer: 'adam'
+  optimizer_lr: 0.001
+  optimizer_momentum: 0.8
+  optimizer_weight_decay: 0.001
+  optimizer_float_16: False
+  lr_scheduler: 'poly'
+  lr_scheduler_power: 0.9
+  ckpt_save_dir: 'logs/checkpoints'
+  mse_w: 5.0
+  stft_sc_w: 0.01
+  stft_mag_w: 0.02
+
+model_config:
+  experiment_name: 'PAEInputFlattenedModel'
+  model_name: 'pae_flat'
+  input_channels: 1
+  intermediate_channels: 32 # 16
+  embedding_channels: 16
+  kernel_size: 51
+  time_range: 32000
+  window: 2.0
+  dilation: 10 # is irrelevant for multi dialation since fixed in code
+
+
+
+worker_config:
+  workers: 0
+  workers_validation: 0 

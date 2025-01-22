@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --ntasks=1                     
 #SBATCH --nodes=1 
-#SBATCH --account=dl
+#SBATCH --account=dl_jobs
 #SBATCH --output=logs/%j.out
 #SBATCH --mem-per-cpu=2G
 #SBATCH --time=00-6:00:00 
@@ -27,6 +27,7 @@ export WANDB_DIR=${TMPDIR}
 export WANDB_CACHE_DIR=${TMPDIR}
 export WANDB_CONFIG_DIR=${TMPDIR}
 
+
 # Run training
 echo "Start training"
-python -m src.scripts.train --config_file "configs/baseline.yaml"
+python -m src.scripts.train --config_file "configs/paeflat50_8.yaml"

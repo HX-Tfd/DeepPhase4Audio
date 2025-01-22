@@ -4,22 +4,27 @@ import uuid
 from datetime import datetime
 
 from sklearn.model_selection import ParameterGrid
-from pytorch_lightning import Trainer
+from pytorch_lightning import Trainer, seed_everything
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger, CSVLogger
 from pytorch_lightning.callbacks import TQDMProgressBar
 from pytorch_lightning.callbacks import RichProgressBar
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
+from pytorch_lightning.callbacks.early_stopping import EarlyStopping
+
 
 from src.utils.config import command_line_parser, yaml_config_parser
-from src.experiments.pae_flattened import PAEInputFlattenedModel # don't remove this
+from src.experiments.pae_deep import PAEDeepModel # don't remove this
+from src.experiments.paella import PAEllaModel
+from src.experiments.pae_wave import PAEWaveModel
+from src.experiments.pae_flattened import PAEInputFlattenedModel
 from src.experiments.ae import AEModel
 from src.utils.helpers import get_device_accelerator 
 
 
 def main():
     cfg = yaml_config_parser() # note that the namespaces are accessed differently
-    
+    seed_everything(42)
     # Resolve name task
     model_name = cfg.experiment_name
     model = eval(model_name)(cfg)
@@ -33,7 +38,7 @@ def main():
     if cfg.logging:
         csv_logger = CSVLogger(
             save_dir='logs',
-            name='Mock Experiment',
+            name=cfg.experiment_name,
         )
         wandb_logger = WandbLogger(
             name=run_name,
@@ -64,45 +69,31 @@ def main():
             metrics_format=".3e",
         )
     )
+    early_stop_callback = EarlyStopping(monitor="loss_train/stft_loss_spectral_convergence", min_delta=0.00, patience=50, verbose=False, mode="max")
 
-    tqdm_progress_bar = TQDMProgressBar(refresh_rate=10)
+    trainer = Trainer(
+        logger=[wandb_logger, csv_logger] if cfg.logging else False,
+        callbacks=[checkpoint_local_callback, rich_progress_bar],
+        accelerator=get_device_accelerator(preferred_accelerator='cuda'),
+        devices=1,
+        default_root_dir=cfg.ckpt_save_dir, 
+        max_epochs=cfg.num_epochs,
+        num_sanity_val_steps=1,
+        precision=16 if cfg.optimizer_float_16 else 32,
+        log_every_n_steps=10,
+        profiler='simple',
+        enable_checkpointing=True,
+    )
+
+    # train and test the model
+    trainer.fit(model, ckpt_path=cfg.resume)
+    print("saving model...")
+    trainer.save_checkpoint(f'logs/models/{model_name}_epoch_{cfg.num_epochs}.ckpt',weights_only=False)
+    print("...done")
+    trainer.test(model)
 
 
-    """
-    Grid Search
-    
-    The keys have to match the params in the cfg 
-    """
-    param_grid = {
-        'dilation': [3, 5, 7, 9, 11],
-        'optimizer_lr': [1e-2, 1e-3, 5e-3],
-        'embedding_channels': [5, 10, 15, 20],
-        'intermediate_channels': [32, 64, 128, 256]
-    }
-    grid = ParameterGrid(param_grid)
-    for params in list(grid):
-        # update params
-        for k, v in params.items():
-            assert hasattr(cfg, k), f"parameter \"{k}\" does not exist in the config"
-            exec(f"cfg.{k} = {v}")
-        print(cfg)
-            
-        trainer = Trainer(
-            logger=[wandb_logger, csv_logger] if cfg.logging else False,
-            callbacks=[checkpoint_local_callback, rich_progress_bar],
-            accelerator=get_device_accelerator(preferred_accelerator='cpu'),
-            devices=1,
-            default_root_dir=cfg.ckpt_save_dir, 
-            max_epochs=cfg.num_epochs,
-            num_sanity_val_steps=1,
-            precision=16 if cfg.optimizer_float_16 else 32,
-            log_every_n_steps=10,
-            profiler='simple'
-        )
 
-        # train and test the model
-        trainer.fit(model, ckpt_path=cfg.resume)
-        trainer.test(model)
 
 
 if __name__ == '__main__':

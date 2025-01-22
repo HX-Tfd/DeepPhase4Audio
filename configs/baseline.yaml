@@ -1,37 +1,42 @@
 metadata:
-  run_name: 'PAEInputFlattened_large_kernel_stft'
+  run_name: 'onetone_reconstruction_1eps'
   log_dir: 'logs'
-  logging: True
+  logging: False
 
 dataset_config:
   dataset: 'audio_dataset'
-  dataset_root: 'data'
+  dataset_root: 'data/one'
   resume: null
 
 training_config:
-  num_epochs: 50
-  batch_size: 16
-  batch_size_validation: 16
+  num_epochs: 1
+  batch_size: 10
+  batch_size_validation: 10
   optimizer: 'adam'
-  optimizer_lr: 0.01
-  optimizer_momentum: 0.9
+  optimizer_lr: 0.001
+  optimizer_momentum: 0.8
   optimizer_weight_decay: 0.001
   optimizer_float_16: False
   lr_scheduler: 'poly'
   lr_scheduler_power: 0.9
   ckpt_save_dir: 'logs/checkpoints'
+  mse_w: 2.0
+  stft_sc_w: 0.1
+  stft_mag_w: 0.1
 
 model_config:
   experiment_name: 'PAEInputFlattenedModel'
   model_name: 'pae_flat'
   input_channels: 1
-  intermediate_channels: 128 # 16
-  embedding_channels: 20
+  intermediate_channels: 32 # 16
+  embedding_channels: 16
   kernel_size: 51
   time_range: 32000
   window: 2.0
-  dilation: 5
+  dilation: 10 # is irrelevant for multi dialation since fixed in code
+
+
 
 worker_config:
   workers: 0
-  workers_validation: 0
+  workers_validation: 0 
