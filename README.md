@@ -5,8 +5,6 @@ in an unsupervised manner. We aim to invoke latent channels
 that capture the non-linear periodicity in a song, from which we
 can reconstruct the input. 
 
-Work in progress: see this [document](https://docs.google.com/document/d/19ITWZiDgPPprBpS5jXa8sgFdNbslxxW3evR3Zupn0YU/edit?tab=t.0)
-
 
 ## Setup
 ### Prerequisites
