@@ -4,15 +4,20 @@ import uuid
 from datetime import datetime
 
 from sklearn.model_selection import ParameterGrid
-from pytorch_lightning import Trainer
+from pytorch_lightning import Trainer, seed_everything
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger, CSVLogger
 from pytorch_lightning.callbacks import TQDMProgressBar
 from pytorch_lightning.callbacks import RichProgressBar
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
+from pytorch_lightning.callbacks.early_stopping import EarlyStopping
+
 
 from src.utils.config import command_line_parser, yaml_config_parser
-from src.experiments.pae_flattened import PAEInputFlattenedModel # don't remove this
+from src.experiments.pae_deep import PAEDeepModel # don't remove this
+from src.experiments.paella import PAEllaModel
+from src.experiments.pae_wave import PAEWaveModel
+from src.experiments.pae_flattened import PAEInputFlattenedModel
 from src.experiments.ae import AEModel
 from src.experiments.vq_pae import VQ_PAEModel
 from src.utils.helpers import get_device_accelerator 
@@ -20,7 +25,7 @@ from src.utils.helpers import get_device_accelerator
 
 def main():
     cfg = yaml_config_parser() # note that the namespaces are accessed differently
-    
+    seed_everything(42)
     # Resolve name task
     model_name = cfg.model_config.experiment_name
     model = eval(model_name)(cfg)
@@ -34,7 +39,7 @@ def main():
     if cfg.metadata.logging:
         csv_logger = CSVLogger(
             save_dir='logs',
-            name='Mock Experiment',
+            name=cfg.experiment_name,
         )
         wandb_logger = WandbLogger(
             name=run_name,
@@ -65,30 +70,27 @@ def main():
             metrics_format=".3e",
         )
     )
+    early_stop_callback = EarlyStopping(monitor="loss_train/stft_loss_spectral_convergence", min_delta=0.00, patience=50, verbose=False, mode="max")
 
-    tqdm_progress_bar = TQDMProgressBar(refresh_rate=10)
-
-
-    """
-    Grid Search
-    
-    The keys have to match the params in the cfg 
-    """
     trainer = Trainer(
-        logger=[wandb_logger, csv_logger] if cfg.metadata.logging else False,
-        callbacks=[checkpoint_local_callback, tqdm_progress_bar],
+        logger=[wandb_logger, csv_logger] if cfg.logging else False,
+        callbacks=[checkpoint_local_callback, rich_progress_bar],
         accelerator=get_device_accelerator(preferred_accelerator='cuda'),
         devices=1,
-        default_root_dir=cfg.training_config.ckpt_save_dir, 
-        max_epochs=cfg.training_config.num_epochs,
+        default_root_dir=cfg.ckpt_save_dir, 
+        max_epochs=cfg.num_epochs,
         num_sanity_val_steps=1,
-        precision=16 if cfg.training_config.optimizer_float_16 else 32,
+        precision=16 if cfg.optimizer_float_16 else 32,
         log_every_n_steps=10,
-        profiler='simple'
+        profiler='simple',
+        enable_checkpointing=True,
     )
 
     # train and test the model
-    trainer.fit(model, ckpt_path=cfg.training_config.resume)
+    trainer.fit(model, ckpt_path=cfg.resume)
+    print("saving model...")
+    trainer.save_checkpoint(f'logs/models/{model_name}_epoch_{cfg.num_epochs}.ckpt',weights_only=False)
+    print("...done")
     trainer.test(model)
 
 

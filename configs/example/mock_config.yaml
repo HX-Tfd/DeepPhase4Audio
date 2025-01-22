@@ -5,7 +5,7 @@ metadata:
 
 dataset_config:
   dataaset: 'mock_dataset'
-  dataset_root: '/data'
+  dataset_root: '/data/test'
   resume: ''
 
 training_config:
@@ -19,7 +19,7 @@ training_config:
 
 model_config:
   model_name: 'pae'
-  input_channels: 78
+  input_channels: 1
   embedding_channels: 5
   time_range: 121
   window: 2.0

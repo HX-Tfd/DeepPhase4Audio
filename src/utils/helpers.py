@@ -7,6 +7,7 @@ from src.models.PAE import AE, PAE, PAEInputFlattened
 from src.datasets.data_processing import AudioDataset
 from src.datasets.dataset import MockDataset
 from src.models.VQ_PAE import VQ_AE
+from src.models.PAE_Wave import * #AE, PAE, PAEInputFlattened,PAEWave,PAEDeep,PAElla
 
 
 class DotDict:
@@ -87,7 +88,10 @@ def resolve_model_class(name, cfg):
         'pae': PAE,
         'pae_flat': PAEInputFlattened,
         'ae': AE, 
-        'vq_pae': VQ_AE
+        'vq_pae': VQ_AE,
+        'pae_deep':PAEDeep,
+        'paella': PAElla,
+        'pae_wave': PAEWave,
     }[name](cfg)
 
 
