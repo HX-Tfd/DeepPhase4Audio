@@ -28,6 +28,12 @@ Required modules on Slurm:
 - **Local development**: To use the repository locally, simply clone it and install the dependencies inside a virtual environment. 
 - **Running on a Slurm cluster**: This code is also designed to be compatible with a Slurm cluster environment. Clone the repository in your cluster and run ```./setup.sh``` for automatically creating the environment and adding the modules.
 
+
+### Models and Configurations
+
+This repository contains two models proposed in our paper: PAEFlat and VQ-PAE. The implementation for PAEFlat can be found in the paewave branch, while the implementation for VQ-PAE is located in the model/vq-pae branch. Each branch includes the respective model files and their corresponding configuration files, enabling easy replication and experimentation.
+
+
 ## References
 
 1. [Periodic Autoencoders for Learning Motion Phase Manifolds](https://dl.acm.org/doi/10.1145/3528223.3530178)
