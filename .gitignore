@@ -21,7 +21,22 @@ docs/source-pytorch/_static/fetched-s3-assets
 docs/source-pytorch/integrations/hpu
 docs/source-pytorch/integrations/strategies/Hivemind.rst
 
+# maybe dont upload every callback and logging file
+logs
+tmp/
 docs/source-fabric/*/generated
+configs/paeflat.yaml
+
+
+# amaru's personal miscelaneous files :))
+get-pip.py
+plots
+save
+test_report.txt
+configs/vq_pae
+wandb.key
+miscelaneous
+
 
 # C extensions
 *.so
@@ -184,7 +199,6 @@ artifacts/*
 # tutorials
 our_model.tar
 test.png
-saved_models
 data/
 !examples/data/
 !tests/tests_pytorch/utilities/data/

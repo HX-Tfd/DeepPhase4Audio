@@ -37,6 +37,7 @@ export WANDB_DIR=${TMPDIR}
 export WANDB_CACHE_DIR=${TMPDIR}
 export WANDB_CONFIG_DIR=${TMPDIR}
 
+
 # Run training
 echo "Start training"
 python -m src.scripts.train --config_file "$CONFIG_FILE"

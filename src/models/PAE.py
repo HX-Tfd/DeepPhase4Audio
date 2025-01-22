@@ -430,5 +430,3 @@ if __name__ == "__main__":
     # ae_model = AE(cfg)
     # x = torch.rand(16, 32000, 1)
     # y, _ = ae_model(x)
-
-
