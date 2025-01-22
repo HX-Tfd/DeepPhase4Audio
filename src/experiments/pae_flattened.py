@@ -32,7 +32,7 @@ class PAEInputFlattenedModel(pl.LightningModule):
         
         # D = D+1 when using PE
         self.D, self.N, self.K = self.model_config.input_channels, self.model_config.time_range, self.model_config.embedding_channels
-        self.name = cfg.experiment_name
+        self.name = self.model_config.experiment_name
         #self.save_hyperparameters()
         seed_everything(42)
         self.saved_once = False
