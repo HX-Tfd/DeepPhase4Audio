@@ -8,35 +8,31 @@ import numpy as np
 import torch
 import torch.nn as nn
 import pytorch_lightning as pl
-from pytorch_lightning import seed_everything
 from pytorch_lightning.loggers import WandbLogger
 from torch.utils.data import DataLoader
+from audiotools import AudioSignal
+import soundfile as sf
 import wandb
 
 from src.datasets.definitions import SPLIT_TRAIN, SPLIT_TEST, SPLIT_VALID
 from src.utils.metrics import MAE
 from src.utils.helpers import resolve_dataset_class, resolve_lr_scheduler, resolve_model_class, resolve_optimizer
 from src.losses.stft_loss import STFTLoss, MultiResolutionSTFTLoss
-import soundfile as sf
+from src.losses.loss import L1Loss, SISDRLoss, MelSpectrogramLoss
 
-
-class PAEInputFlattenedModel(pl.LightningModule):
+class VQ_PAEModel(pl.LightningModule):
 
     def __init__(self, cfg, **kwargs) -> None:
-        super(PAEInputFlattenedModel, self).__init__()
+        super(VQ_PAEModel, self).__init__()
         self.cfg = cfg
         self.dataset_cfg = cfg.dataset_config
         self.training_config = cfg.training_config
         self.model_config = cfg.model_config
         self.worker_config = cfg.worker_config
-        
-        # D = D+1 when using PE
-        self.D, self.N, self.K = self.model_config.input_channels, self.model_config.time_range, self.model_config.embedding_channels
-        self.name = self.model_config.experiment_name
-        #self.save_hyperparameters()
-        seed_everything(42)
+        self.loss_config = cfg.loss_config
         self.saved_once = False
 
+        self.D, self.N, self.K = self.model_config.input_channels, self.model_config.time_range, self.model_config.embedding_channels
         dataset_class = resolve_dataset_class(self.dataset_cfg.dataset)
         self.datasets = {
             split: dataset_class(dataset_root=self.dataset_cfg.dataset_root, # dataset root is not important here
@@ -47,148 +43,176 @@ class PAEInputFlattenedModel(pl.LightningModule):
         for split in (SPLIT_TRAIN, SPLIT_VALID, SPLIT_TEST):
             print(f'Number of samples in {split} split: {len(self.datasets[split])}')
 
-
         self._instantiate_model()
-        self.loss = nn.MSELoss()
+        self.feat_loss = L1Loss()
+        self.mel_loss = MelSpectrogramLoss()
+        self.sisdr_loss = SISDRLoss()
+        self.recon_loss = nn.MSELoss()
         self.stft_loss = STFTLoss()
         self.metric = MAE
+        
+        self.loss_weights = self.loss_config.loss_weights.to_dict()
+        self.vq_only = self.model_config.vq_only
+        
+    @staticmethod
+    def _to_audio_signal(x: torch.Tensor, sample_rate=32000):
+        return AudioSignal(x, sample_rate=sample_rate)
+
 
     def training_step(self, batch, batch_idx):
         if torch.cuda.is_available():
             batch.to(self.device)
-        pred, _, _, param = self.model(batch) # output is (y, latent, signal, param)
+        pred = self.model(batch) 
         
-        if self.D == 1:
-            batch = batch[:, 0, :].reshape(batch.shape[0], self.N)
-            pred = pred.reshape(pred.shape[0], self.N)
-        else:
-            pred = pred.reshape(pred.shape[0], self.D, self.N)
-            
-        loss = self.loss(batch, pred)
-        stft_loss = self.stft_loss(batch, pred)
-        stft_sc, stft_mag = stft_loss[0], stft_loss[1]
-        amp_reg = self.loss(param[2],torch.zeros_like(param[2]))
-        loss_total = self.cfg.mse_w*loss + self.cfg.stft_sc_w*stft_sc + self.cfg.stft_mag_w*stft_mag # TODO remove the hard coded values
-
-
+        loss_items = {}
+        x_recon = pred["audio"]
+        # z_pae = pred["z_pae"] # B, emb_ch, L
+        # z_vq = pred["z_vq"]   # B, emb_ch, L
+        # codes = pred["codes"] # B, n_codebooks, L
+        # latents = pred["latents"] # B, n_codebooks x codebook_dim, L
+        vq_comm_loss = pred["vq/commitment_loss"]
+        vq_cb_loss = pred["vq/codebook_loss"]
+        
+        # add loss items
+        loss_items["recon_loss"] = self.recon_loss(batch, x_recon)
+        stft_loss = self.stft_loss(batch, x_recon)
+        loss_items["stft_loss_spectral_convergence"], loss_items["stft_loss_magnitude"] = \
+            stft_loss[0], stft_loss[1]
+        loss_items["vq/vodebook_loss"] = vq_cb_loss
+        loss_items["vq/commitment_loss"] = vq_comm_loss
+        loss_items["feature_matching_loss"] = self.feat_loss(self._to_audio_signal(batch), 
+                                                             self._to_audio_signal(x_recon))
+        loss_items["mel_spectrogram_loss"] = self.mel_loss(self._to_audio_signal(batch), 
+                                                           self._to_audio_signal(x_recon))
+        loss_items["total_loss"] = sum([v * loss_items[k] for k, v in self.loss_weights.items() if k in loss_items])
         self.log_dict(
-            {
-                'loss_train/mse_loss': loss,
-                'loss_train/stft_loss_spectral_convergence': stft_sc,
-                'loss_train/stft_loss_magnitude': stft_mag,
-                'loss_train/total_loss': loss_total,
-            }, on_step=True, on_epoch=False, prog_bar=True
+            {f"loss_train/{k}": v for k, v in loss_items.items()}, 
+            on_step=True, on_epoch=False, prog_bar=True
         )
 
         return {
-            'loss': loss_total
+            'loss': loss_items["total_loss"]
         }
-
-
-    def on_train_epoch_end(self):
-        #all_preds = torch.stack(self.training_step_outputs)
-        # do something with all preds
-        #self.training_step_outputs.clear()  # free memory
-        pass
+        
 
     def validation_step(self, batch, batch_idx):
         if torch.cuda.is_available():
             batch.to(self.device)
-        pred, latent, signal, params = self.model(batch)
+        pred = self.model(batch) 
         
-        if self.D == 1:
-            batch = batch[:, 0, :].reshape(batch.shape[0], self.N)
-            pred = pred.reshape(pred.shape[0], self.N)
-        else:
-            pred = pred.reshape(pred.shape[0], self.D, self.N)
-            
-        loss = self.loss(batch, pred)
-        stft_loss = self.stft_loss(batch, pred)
-        metrics_mae = self.metric(batch, pred)
-        stft_sc, stft_mag = stft_loss[0], stft_loss[1]
-        loss_total = loss + stft_sc + stft_mag 
+        loss_items = {}
+        x_recon = pred["audio"]
+        # z_pae = pred["z_pae"] # B, emb_ch, L
+        # z_vq = pred["z_vq"]   # B, emb_ch, L
+        # codes = pred["codes"] # B, n_codebooks, L
+        # latents = pred["latents"] # B, n_codebooks x codebook_dim, L
+        z_recon = pred["z_recon"]
+        phase_params = pred["phase_params"]
+        vq_comm_loss = pred["vq/commitment_loss"]
+        vq_cb_loss = pred["vq/codebook_loss"]
         
-        # log scalars
+        # add loss items
+        loss_items["recon_loss"] = self.recon_loss(batch, x_recon)
+        stft_loss = self.stft_loss(batch, x_recon)
+        loss_items["stft_loss_spectral_convergence"], loss_items["stft_loss_magnitude"] = \
+            stft_loss[0], stft_loss[1]
+        loss_items["vq/vodebook_loss"] = vq_cb_loss
+        loss_items["vq/commitment_loss"] = vq_comm_loss
+        loss_items["feature_matching_loss"] = self.feat_loss(self._to_audio_signal(batch), 
+                                                             self._to_audio_signal(x_recon))
+        loss_items["mel_spectrogram_loss"] = self.mel_loss(self._to_audio_signal(batch), 
+                                                           self._to_audio_signal(x_recon))
+        loss_items["total_loss"] = sum([v * loss_items[k] for k, v in self.loss_weights.items() if k in loss_items])
         self.log_dict(
-            {   
-                'loss_val/mse_loss': loss,
-                'loss_val/stft_loss_spectral_convergence':  stft_sc,
-                'loss_val/stft_loss_magnitude': stft_mag,
-                'metrics/MAE_val': metrics_mae,
-                'loss_val/total_loss': loss_total,
-            }, on_step=False, on_epoch=True
+            {f"loss_val/{k}": v for k, v in loss_items.items()}, 
+            on_step=False, on_epoch=True, prog_bar=True
         )
         
         # log figures, randomly select one validation signal
         k = torch.randint(0, batch.shape[0], (1,)).item()
         x = batch[k, ...]
-        y = pred[k, ...]
-        selected_latent_signal = signal[k, ...]
-        selected_params = [p[k, ...] for p in params]
+        y = x_recon[k, ...]
+        selected_latent_signal = z_recon[k, ...] if z_recon is not None else None
         
         title_prefix = 'images_val'
         fig_reconstruction = self._visualize_reconstruction(x, y, selected_latent_signal)
-        fig_latent_val = self._visualize_latent_values(selected_params)
         figure_log_spectogram = self._visualize_log_spectogram(x, y)
         self._log_figure(title=f"{title_prefix}/Reconstruction", caption="Input vs Reconstructed Signal", 
                          img=fig_reconstruction)
-        self._log_figure(title=f"{title_prefix}/Latent Values", caption="Value Histogram of Learned Latent Parameters", 
-                         img=fig_latent_val)
         self._log_figure(title=f"{title_prefix}/Log Spectogram", caption="Input and Output Log Spectograms", 
                          img=figure_log_spectogram)
         
+        if not self.vq_only:
+            selected_params = [p[k, ...] for p in phase_params]
+            fig_latent_val = self._visualize_latent_values(selected_params)
+            self._log_figure(title=f"{title_prefix}/Latent Values", caption="Value Histogram of Learned Latent Parameters", 
+                            img=fig_latent_val)
     
-    def on_validation_epoch_end(self):
-        #all_preds = torch.stack(self.validation_step_outputs)
-        # do something with all preds
-        #self.validation_step_outputs.clear()  # free memory
-        pass
-
-
     def test_step(self, batch, batch_idx):
+        # Move batch to the appropriate device if it's not on CPU already
         if torch.cuda.is_available():
-            batch.to(self.device)
-        pred, _, _, _ = self.model(batch)
-        metrics_mae = self.metric(batch, pred.reshape(pred.shape[0], self.D, self.N))
-        
-        for i in range(batch.shape[0]):
-            if not self.device == 'cpu':
-                act = batch[i,0].cpu().numpy()
-                pre = pred[i].cpu().numpy()
-            else:
-                act = batch[i,0].numpy()
-                pre = pred[i].numpy()
-            
-            if not self.saved_once:
-                sf.write(f'save/actual_eps_{self.cfg.num_epochs}_{self.cfg.embedding_channels}.wav',act,16000)
-                sf.write(f'save/pred_eps_{self.cfg.num_epochs}_emb_size_{self.cfg.embedding_channels}.wav', pre,16000)
-                self.saved_once = True
-        
-        self.log_dict(
-            {
-                'metrics/MAE_test': metrics_mae
-            }, on_step=False, on_epoch=True
-        )
-        
-    def test(self, batch, batch_idx):
-        if torch.cuda.is_available():
-            batch.to(self.device)
-        pred, _, _, _ = self.model(batch)
-        metrics_mae = self.metric(batch, pred.reshape(pred.shape[0], self.D, self.N))
-        
-        for i in range(batch.shape[0]):
-            if not self.device == 'cpu':
-                act = batch[i,0].cpu().numpy()
-                pre = pred[i].cpu().numpy()
-            else:
-                act = batch[i,0].numpy()
-                pre = pred[i].numpy()
-            
-        return pred
-
-    def test_end(self, outputs):
-        return {}
+            batch = batch.to(self.device)
     
+        # Perform the forward pass
+        pred = self.model(batch)
+    
+    # Define a dictionary to store various loss metrics
+        loss_items = {}
+    
+    # Assuming pred contains the necessary output (similar to validation_step)
+        x_recon = pred["audio"]
+        z_recon = pred["z_recon"]
+        phase_params = pred["phase_params"]
+        vq_comm_loss = pred["vq/commitment_loss"]
+        vq_cb_loss = pred["vq/codebook_loss"]
+    
+    # Calculate various losses
+        loss_items["recon_loss"] = self.recon_loss(batch, x_recon)
+        stft_loss = self.stft_loss(batch, x_recon)
+        loss_items["stft_loss_spectral_convergence"], loss_items["stft_loss_magnitude"] = stft_loss[0], stft_loss[1]
+        loss_items["vq/codebook_loss"] = vq_cb_loss
+        loss_items["vq/commitment_loss"] = vq_comm_loss
+        loss_items["feature_matching_loss"] = self.feat_loss(self._to_audio_signal(batch), self._to_audio_signal(x_recon))
+        loss_items["mel_spectrogram_loss"] = self.mel_loss(self._to_audio_signal(batch), self._to_audio_signal(x_recon))
+
+        # Total loss calculation
+        loss_items["total_loss"] = sum([v * loss_items[k] for k, v in self.loss_weights.items() if k in loss_items])
+
+        # Log loss items
+        self.log_dict(
+            {f"loss_test/{k}": v for k, v in loss_items.items()},
+            on_step=False, on_epoch=True, prog_bar=True
+        )
+
+        # Select a random batch to log figures and save the audio signals
+        k = torch.randint(0, batch.shape[0], (1,)).item()
+        x = batch[k, ...]
+        y = x_recon[k, ...]
+        selected_latent_signal = z_recon[k, ...] if z_recon is not None else None
+        """
+        # Visualize the reconstruction and log it
+        title_prefix = 'images_test'
+        fig_reconstruction = self._visualize_reconstruction(x, y, selected_latent_signal)
+        figure_log_spectogram = self._visualize_log_spectogram(x, y)
+
+        self._log_figure(title=f"{title_prefix}/Reconstruction", caption="Input vs Reconstructed Signal", img=fig_reconstruction)
+        self._log_figure(title=f"{title_prefix}/Log Spectogram", caption="Input and Output Log Spectograms", img=figure_log_spectogram)
+    
+        # Optionally visualize the latent values
+        if not self.vq_only:
+            selected_params = [p[k, ...] for p in phase_params]
+            fig_latent_val = self._visualize_latent_values(selected_params)
+            self._log_figure(title=f"{title_prefix}/Latent Values", caption="Value Histogram of Learned Latent Parameters", img=fig_latent_val)
+        """
+        # Save the audio signals (this step could be adapted or removed based on your specific needs)
+        if not self.saved_once:
+            act = batch[k].cpu().numpy()
+            pre = x_recon[k].cpu().numpy()
+            sf.write(f'actual_2signals_{k}.wav', act, 16000)
+            sf.write(f'pred_2signals_{k}.wav', pre, 16000)
+            self.saved_once = True
+
+        return loss_items["total_loss"]
 
     def train_dataloader(self):
         return self._create_train_dataloader()
@@ -208,11 +232,6 @@ class PAEInputFlattenedModel(pl.LightningModule):
         return [optimizer], [lr_scheduler]
     
 
-    def on_load_checkpoint(self, checkpoint):
-        super().on_load_checkpoint(checkpoint)
-        #self.load_state_dict(checkpoint["model_state_dict"])
-
-
     def _create_train_dataloader(self):
         return DataLoader(
             self.datasets[SPLIT_TRAIN],
@@ -223,6 +242,7 @@ class PAEInputFlattenedModel(pl.LightningModule):
             drop_last=True,
         )
 
+
     def _create_val_test_dataloader(self, split):
         return DataLoader(
             self.datasets[split],
@@ -232,6 +252,7 @@ class PAEInputFlattenedModel(pl.LightningModule):
             pin_memory=True,
             drop_last=False,
         )
+    
     
     def _inference_step(self, batch):
         pass
@@ -251,15 +272,17 @@ class PAEInputFlattenedModel(pl.LightningModule):
             })
         
         
-    def _visualize_reconstruction(self, x, y, signal) -> PIL.Image:
+    def _visualize_reconstruction(self, x, y, signal=None) -> PIL.Image:
         """
-            Plot input signal x against output signal y
+            Plot input signal x against output signal y, plot latent signals
         """
         assert len(x.shape) == len(y.shape) == 1, "int/out have to be flattened 1D tensors"
-        assert len(signal.shape) == 2, "latent signal has to be a 2D tensor"
+        if signal is not None:
+            assert len(signal.shape) == 2, "latent signal has to be a 2D tensor"
+            signal = signal.detach().cpu().numpy()
+            
         x = x.detach().cpu().numpy()
         y = y.detach().cpu().numpy()
-        signal = signal.detach().cpu().numpy()
         
         T = 500 # only show first T steps
 
@@ -270,18 +293,19 @@ class PAEInputFlattenedModel(pl.LightningModule):
         plt.xlabel("Steps")
         plt.ylabel("Signal")
         plt.title("Input vs Reconstructed Signal")
-        plt.legend(loc="lower right")
+        plt.legend()
         plt.grid()
 
-        # Plot each of the k signals in a different color
-        plt.subplot(1, 2, 2)
-        for i in range(self.K):
-            plt.plot(range(100), signal[i, :100], label=f"Signal {i+1}")
-        plt.xlabel("Time/Index")
-        plt.ylabel("Amplitude")
-        plt.title(f"{self.K} Latent Signals")
-        plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
-        plt.legend(loc="lower left")
+        if signal is not None:
+            # Plot each of the k signals in a different color
+            plt.subplot(1, 2, 2)
+            for i in range(self.K):
+                plt.plot(range(100), signal[i, :100], label=f"Signal {i+1}")
+            plt.xlabel("Time/Index")
+            plt.ylabel("Amplitude")
+            plt.title(f"{self.K} Latent Signals")
+            plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
+            plt.legend()
         
         img = self._fig_to_PIL_img(fig)
         plt.close()

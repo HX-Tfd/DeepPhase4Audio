@@ -1,7 +1,7 @@
 metadata:
-  run_name: 'AE_baseline'
+  run_name: 'PAE_Snake'
   log_dir: 'logs'
-  logging: True
+  logging: Yes
 
 dataset_config:
   dataset: 'audio_dataset'
@@ -13,24 +13,28 @@ training_config:
   batch_size: 16
   batch_size_validation: 16
   optimizer: 'adam'
-  optimizer_lr: 0.01
+  optimizer_lr: 0.001
   optimizer_momentum: 0.9
   optimizer_weight_decay: 0.001
   optimizer_float_16: False
   lr_scheduler: 'poly'
   lr_scheduler_power: 0.9
   ckpt_save_dir: 'logs/checkpoints'
+  resume: null
 
 model_config:
-  experiment_name: 'AEModel'
-  model_name: 'ae'
+  experiment_name: 'PAEInputFlattenedModel'
+  model_name: 'pae_flat'
   input_channels: 1
-  intermediate_channels: 128 # 16
-  embedding_channels: 20
-  kernel_size: 51
+  intermediate_channels: 64 # 16
+  embedding_channels: 16
   time_range: 32000
   window: 2.0
-  dilation: 5
+  fft_mlp: False
+  enc_dilation_rates: [9, 5, 1]
+  enc_kernel_sizes: [21, 11, 5]
+  dec_dilation_rates: [1, 5, 9]
+  dec_kernel_sizes: [5, 11, 21]
 
 worker_config:
   workers: 0

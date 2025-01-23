@@ -1,5 +1,5 @@
 metadata:
-  run_name: 'onetone_reconstruction_1eps'
+  run_name: 'AE_baseline'
   log_dir: 'logs'
   logging: False
 
@@ -20,13 +20,14 @@ training_config:
   lr_scheduler: 'poly'
   lr_scheduler_power: 0.9
   ckpt_save_dir: 'logs/checkpoints'
+  resume: null
   mse_w: 2.0
   stft_sc_w: 0.1
   stft_mag_w: 0.1
 
 model_config:
-  experiment_name: 'PAEInputFlattenedModel'
-  model_name: 'pae_flat'
+  experiment_name: 'AEModel'
+  model_name: 'ae'
   input_channels: 1
   intermediate_channels: 32 # 16
   embedding_channels: 16

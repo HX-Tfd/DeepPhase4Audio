@@ -219,3 +219,14 @@ requirements/base.txt
 
 # sourced notebooks from tutorials
 _notebooks/.notebooks/
+
+# miscelaneous
+tmp/
+save/
+plots/
+logs/
+get-pip.py
+configs/paeflat.yaml
+configs/vq_pae/tryout.yaml
+miscelaneous
+combinations.txt
