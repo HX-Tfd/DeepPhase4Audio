@@ -5,8 +5,6 @@ in an unsupervised manner. We aim to invoke latent channels
 that capture the non-linear periodicity in a song, from which we
 can reconstruct the input. 
 
-Work in progress: see this [document](https://docs.google.com/document/d/19ITWZiDgPPprBpS5jXa8sgFdNbslxxW3evR3Zupn0YU/edit?tab=t.0)
-
 
 ## Setup
 ### Prerequisites
@@ -27,6 +25,12 @@ Required modules on Slurm:
 ### Steps
 - **Local development**: To use the repository locally, simply clone it and install the dependencies inside a virtual environment. 
 - **Running on a Slurm cluster**: This code is also designed to be compatible with a Slurm cluster environment. Clone the repository in your cluster and run ```./setup.sh``` for automatically creating the environment and adding the modules.
+- **How to run the code**: ./train_slurm.sh. Replace the config file inside train_slurm.sh with the config file for the model you want to run.
+
+### Models and Configurations
+
+This repository contains two models proposed in our paper: PAEFlat and VQ-PAE. The implementation for PAEFlat can be found in the paewave branch, while the implementation for VQ-PAE is located in the model/vq-pae branch. Each branch includes the respective model files and their corresponding configuration files, enabling easy replication and experimentation.
+
 
 ## References
 
