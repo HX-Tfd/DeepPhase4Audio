@@ -25,7 +25,7 @@ Required modules on Slurm:
 ### Steps
 - **Local development**: To use the repository locally, simply clone it and install the dependencies inside a virtual environment. 
 - **Running on a Slurm cluster**: This code is also designed to be compatible with a Slurm cluster environment. Clone the repository in your cluster and run ```./setup.sh``` for automatically creating the environment and adding the modules.
-
+- **How to run the code**: ./train_slurm.sh. Replace the config file inside train_slurm.sh with the config file for the model you want to run.
 
 ### Models and Configurations
 
